@@ -65,6 +65,7 @@ jobs:
         run: |
           powershell -NoProfile -File scripts/build-cui.ps1 -SkipTests
           apps/desktop-cui/build/briks_smoke.exe
+          apps/desktop-cui/build/briks_safety_test.exe
       # o briks-core é só do Windows (Media Foundation, WGC, áudio): o runner Linux nem compila (alsa). Dois testes dependem de hardware/ambiente e ficam de fora.
       - name: briks-core tests (loopback, signaling simulado)
         run: cargo test --release --manifest-path apps/desktop-cui/briks-core/Cargo.toml -- --skip hardware_encoder_that_always_fails --skip realtime_falls_back_to_supabase_json

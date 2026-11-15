@@ -1,6 +1,7 @@
 /* Sobreposição em jogos (lado do app): abre o briks_overlay.exe numa chamada, manda por stdin quem está na sala e o que mostrar,
  * e o fecha ao sair da chamada ou desligar a opção. Protocolo em src/overlay.c. Testes ocultos nunca abrem o processo (só montam o quadro). */
 #include "briks_ui.h"
+#include "safety.h"
 #include "sysint.h"
 #include <windows.h>
 #include <stdio.h>
@@ -193,7 +194,7 @@ static void collect_lives(const app_state_t *s) {
     g_nlives = 0;
     if (g_fake_lives >= 0) { for (int k = 0; k < g_fake_lives && k < MAXLIVE; k++) { char id[24], nm[24]; snprintf(id, sizeof id, "fake-%d", k); snprintf(nm, sizeof nm, "Participante %d", k + 1); live_add(id, nm, "", -1, 0); } }
     else if (g_edit && !s->in_room) { live_add("demo-a", "Amigo 1", "", -1, 0); live_add("demo-b", "Amigo 2", "", -1, 0); }
-    else for (int i = 0; i < BRIKS_MAX_PEERS; i++) if (s->rtc_peers[i].id[0]) {
+    else for (int i = 0; i < BRIKS_MAX_PEERS; i++) if (s->rtc_peers[i].id[0] && !safety_covered(s, i)) {   /* coberta (desconhecido não revelado / parei de ver): não aparece por cima do jogo */
         if (s->sh.remote[i].on) live_add(s->rtc_peers[i].id, s->rtc_peers[i].name, s->sh.remote[i].path, i, 0);
         if (s->sh.remote2[i].on) live_add(s->rtc_peers[i].id, s->rtc_peers[i].name, s->sh.remote2[i].path, i, 1);
     }

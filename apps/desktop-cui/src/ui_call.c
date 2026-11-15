@@ -3,6 +3,7 @@
  * Medidas de apps/web/src/components/CallWorkspace.tsx + call-workspace.css / glass-layout.css; lógica pura em callhist.c. */
 #include "msgui.h"
 #include "call.h"
+#include "safety.h"
 #include "volume_ctl.h"
 #include "netdiag.h"
 #include "call_idle.h"
@@ -19,7 +20,7 @@ static int g_sheen_seen;   /* roteiros: quadros em que o brilho foi desenhado no
 
 static app_state_t *g_tile_s;   /* estado para o menu do bloco (slider de volume por pessoa) */
 typedef struct { const char *name; bool me, muted; float level; int slot; bool by_me, can_kick, live; const char *status; const char *badge; cui_texture vtex; int vw, vh; bool deaf; cui_texture ptex; } tile_t;   /* ptex: foto de perfil (0 = iniciais) */
-enum { TILE_NONE = 0, TILE_MUTE, TILE_KICK, TILE_FOCUS, TILE_ASK, TILE_WATCH, TILE_ROOM_MUTE };
+enum { TILE_NONE = 0, TILE_MUTE, TILE_KICK, TILE_FOCUS, TILE_ASK, TILE_WATCH, TILE_ROOM_MUTE, TILE_REPORT };
 #define SLOT_ME (BRIKS_MAX_PEERS + 1)
 static bool g_can_room_mute;   /* sou o dono e a chamada está no servidor de chamadas: posso silenciar alguém para todos */
 static struct { float lvl, d; } g_av[BRIKS_MAX_PEERS + 2];   /* nível de fala e diâmetro do avatar por tile (0..7 peers, 8 prévia, 9 eu), lidos pelo canvas ao pintar */
@@ -311,8 +312,9 @@ static int tile(cui_ctx *ui, const tile_t *t, float w, float h, bool mic_on) {
                     if (cui_menu_item(ui, "Destacar (modo Foco)", .icon = CUI_ICON_MAXIMIZE_2)) act = TILE_FOCUS;
                     if (t->live) { if (cui_menu_item(ui, "Ver a transmissão", .icon = CUI_ICON_MONITOR)) act = TILE_WATCH; }
                     else if (cui_menu_item(ui, "Pedir transmissão", .icon = CUI_ICON_MONITOR)) act = TILE_ASK;
+                    if (!t->me) { cui_menu_separator(ui); if (cui_menu_item(ui, "Denunciar…", .icon = CUI_ICON_FLAG, .danger = true)) act = TILE_REPORT; }
                     if (t->can_kick) {
-                        cui_menu_separator(ui);
+                        if (t->me) cui_menu_separator(ui);
                         if (cui_menu_item(ui, "Expulsar da chamada…", .icon = CUI_ICON_PHONE, .danger = true)) act = TILE_KICK;
                     }
                 }
@@ -633,6 +635,7 @@ static void do_tile(cui_ctx *ui, app_state_t *s, const tile_t *t, float w, float
         if (act == TILE_MUTE) rtc_mute_peer(s, i, !s->rtc_peers[i].muted_by_me);
         else if (act == TILE_ROOM_MUTE) rtc_room_mute(s, i, !s->rtc_peers[i].mic_off);
         else if (act == TILE_KICK) { s->kick_slot = i; s->kick_open = true; }
+        else if (act == TILE_REPORT) safety_report_open(i);
         else if (act == TILE_WATCH) s->call_mode = 1;
         else if (act == TILE_ASK) {
             rtc_stream_request(s, i);
@@ -909,6 +912,7 @@ void ui_call(cui_ctx *ui, app_state_t *s) {
     ui_share_dialog(ui, s);
     settings_dialog(ui, s);   /* botão de engrenagem do cabeçalho da chamada */
     msgui_overlay(ui, s);   /* o seletor de emojis (e menus de mensagem) desenha aqui tambem: sem isto o botao de emoji do editor de sons, na chamada, nunca mostrava o painel */
+    safety_report_dialog(ui, s);   /* 1.5.28: denunciar */
     /* confirmação rápida antes de expulsar */
     if (s->kick_open) {
         const char *who = (s->kick_slot >= 0 && s->kick_slot < BRIKS_MAX_PEERS && s->rtc_peers[s->kick_slot].name[0]) ? s->rtc_peers[s->kick_slot].name : "esta pessoa";

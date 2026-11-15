@@ -12,7 +12,7 @@ FetchContent_Declare(cui
   PATCH_COMMAND  ${CMAKE_COMMAND} -P "${CMAKE_CURRENT_SOURCE_DIR}/patches/apply.cmake")
 FetchContent_MakeAvailable(cui)
 
-add_executable(briks_cui WIN32 src/main.c src/theme.c src/theme_cfg.c src/perf.c src/ui_auth.c src/ui_social.c src/ui_call.c src/app.c src/chat.c src/ginvite.c src/ui_history.c src/layout.c src/drag_stack.c src/drag_stack_ui.c src/dock.c src/script.c src/glass.c src/json.c src/backend.c src/core.c src/rtc.c src/profile.c src/msgui.c src/migrate.c src/update.c src/ui_update.c src/settings.c src/themes.c src/account.c src/ui_account.c src/ui_share.c src/ui_cam.c src/ui_voice.c src/hotkeys.c src/hotkeys_rt.c src/netdiag.c src/attach.c src/richtext.c src/ui_friends.c src/ui_groups.c src/winstate.c src/tray.c src/notify.c src/hotkeys_win.c src/storage.c src/settings_data.c src/overlay_host.c src/callhist.c src/firewall.c src/media_preview.c src/volume_ctl.c src/brick.c)
+add_executable(briks_cui WIN32 src/main.c src/theme.c src/theme_cfg.c src/perf.c src/ui_auth.c src/ui_social.c src/ui_call.c src/app.c src/chat.c src/ginvite.c src/ui_history.c src/layout.c src/drag_stack.c src/drag_stack_ui.c src/dock.c src/script.c src/glass.c src/json.c src/backend.c src/core.c src/rtc.c src/profile.c src/msgui.c src/migrate.c src/update.c src/ui_update.c src/settings.c src/themes.c src/account.c src/ui_account.c src/ui_share.c src/ui_cam.c src/ui_voice.c src/hotkeys.c src/hotkeys_rt.c src/netdiag.c src/attach.c src/richtext.c src/ui_friends.c src/ui_groups.c src/winstate.c src/tray.c src/notify.c src/hotkeys_win.c src/storage.c src/settings_data.c src/overlay_host.c src/callhist.c src/firewall.c src/media_preview.c src/volume_ctl.c src/brick.c src/safety.c src/safety_ui.c)
 target_sources(briks_cui PRIVATE src/net_state.c src/accountx.c src/titlebar.c src/hotkeys_ovl.c src/ui_nettest.c src/sons.c src/sons_util.c)   # estado da internet e faixa offline
 if(WIN32)
 endif()
@@ -101,3 +101,7 @@ target_link_libraries(briks_accountx_test PRIVATE cui bcrypt shell32 user32 gdi3
 add_executable(briks_hotkey_test tests/hotkey_test.c src/hotkeys.c src/hotkeys_win.c)
 target_compile_options(briks_hotkey_test PRIVATE /utf-8)
 target_link_libraries(briks_hotkey_test PRIVATE user32)
+
+add_executable(briks_safety_test tests/safety_test.c src/safety.c src/json.c)   # cobertura de transmissões de desconhecidos e registro de denúncias: sem janela
+target_compile_options(briks_safety_test PRIVATE /utf-8)
+target_link_libraries(briks_safety_test PRIVATE cui bcrypt shell32 user32 gdi32 opengl32)

@@ -9,6 +9,7 @@
 #include "callhist.h"
 #include "call.h"
 #include "volume_ctl.h"
+#include "safety.h"
 #include <cui/cui_render.h>
 #include <math.h>
 #include <stdio.h>
@@ -1238,6 +1239,20 @@ static bool video_tile(cui_ctx *ui, int key, cui_texture tex, int tw, int th, co
                 cui_text(ui, wait, .size = 14, .color = B_MUTED);
             }
         }
+        {   /* 1.5.28: transmissão de desconhecido começa coberta (Configurações > Segurança); "Parar de ver" também cobre */
+            const int sgp = (key >= 0 && key < BRIKS_MAX_PEERS) ? key : (key >= FV_N && key < FV_N + BRIKS_MAX_PEERS) ? key - FV_N : -1;
+            if (sgp >= 0 && g_vt_s && safety_covered(g_vt_s, sgp)) {
+                const bool hid = safety_hidden(g_vt_s, sgp);
+                cui_box(ui, .id = "sgcov", .width = CUI_FILL, .height = CUI_FILL, .radius = 20, .bg = CUI_RGBA(0x120620f8), .align = CUI_ALIGN_CENTER, .justify = CUI_JUSTIFY_CENTER, .gap = compact ? 4 : 10, .pad = 12) {
+                    cui_icon(ui, hid ? CUI_ICON_EYE_OFF : CUI_ICON_SHIELD, compact ? 18 : 34, B_C3);
+                    if (!compact) {
+                        cui_text(ui, hid ? "Você parou de ver esta transmissão." : "Transmissão de alguém que não é seu amigo.", .size = 14, .color = B_MUTED);
+                        if (!hid) cui_text(ui, "Pode ter conteúdo sensível. Veja só se quiser.", .size = 12, .color = B_MUTED);
+                    }
+                    if (cui_button(ui, hid ? "Voltar a ver" : "Mostrar", .variant = CUI_BUTTON_SECONDARY, .size = CUI_SIZE_SM)) safety_reveal(g_vt_s, sgp);
+                }
+            }
+        }
         if (hov) cui_box(ui, .width = CUI_FILL, .height = CUI_FILL, .align = CUI_ALIGN_START, .justify = CUI_JUSTIFY_END, .pad = compact ? 8 : 18) {
             cui_card_begin(ui, &(cui_card_opts){ .id = "lab", .dir = CUI_ROW, .gap = 7, .pad_x = compact ? 8 : 12, .pad_y = compact ? 4 : 8, .align = CUI_ALIGN_CENTER });
             if (!compact) cui_icon(ui, CUI_ICON_MONITOR, 14, B_C3);
@@ -1302,6 +1317,9 @@ static bool video_tile(cui_ctx *ui, int key, cui_texture tex, int tw, int th, co
                             if (briks_volume(ui, "svol", &pct, 0.0f, 200.0f, 1.0f, NULL, true) & VOLCTL_VOL) { *sv = pct / 100.0f; share_remote_volume_changed(as, peer); }
                         }
                     }
+                    cui_menu_separator(ui);
+                    if (cui_menu_item(ui, safety_hidden(as, peer) ? "Voltar a ver a transmissão" : "Parar de ver a transmissão", .icon = CUI_ICON_EYE_OFF)) { if (safety_hidden(as, peer)) safety_reveal(as, peer); else safety_hide(as, peer, true); cui_popover_close(ui, "svmenu"); }
+                    if (cui_menu_item(ui, "Denunciar…", .icon = CUI_ICON_FLAG, .danger = true)) { safety_report_open(peer); cui_popover_close(ui, "svmenu"); }
                 }
             }
         }
@@ -1311,8 +1329,8 @@ static bool video_tile(cui_ctx *ui, int key, cui_texture tex, int tw, int th, co
         /* Grade: clique CURTO no bloco (não arrasto, não nos controles do bloco) abre esta transmissão em Foco; Enter com o ponteiro sobre o bloco também */
         const cui_vec2 mp = cui_mouse_pos(ui); const cui_rect vr = cui_get_rect(ui, cui_make_id(ui, "vt"));
         bool inside = vr.w > 0 && pt_in(vr, mp) && !briks_blocked() && !briks_covered(ui);
-        const char *kids[] = { "volbar", "zrst", "pnote", "lab" };
-        for (int k = 0; k < 4 && inside; k++) { cui_rect kr = cui_get_rect(ui, cui_make_id(ui, kids[k])); if (kr.w > 0 && pt_in(kr, mp)) inside = false; }
+        const char *kids[] = { "volbar", "zrst", "pnote", "lab", "sgcov" };
+        for (int k = 0; k < 5 && inside; k++) { cui_rect kr = cui_get_rect(ui, cui_make_id(ui, kids[k])); if (kr.w > 0 && pt_in(kr, mp)) inside = false; }
         bool open = false;
         if (g_tg_press && inside) { g_tg_at = mp; g_tg_key = key; }
         if (g_tg_release && inside && g_tg_key == key) {   /* soltou no mesmo bloco, quase onde apertou */
