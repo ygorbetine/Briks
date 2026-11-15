@@ -36,7 +36,7 @@ typedef struct {
     int fw_choice;                /* Firewall: 0 não decidido, 1 liberado, 2 agora não, 3 não perguntar */
     bool call_mode_set;           /* o usuário escolheu o modo da chamada (sem isso, 2/SFU gravado é o padrão antigo e migra para Automático) */
     int net_pref, call_mode;      /* conexão: auto/internet direta/VPN privada; chamada: auto/P2P/SFU */
-    bool sens_guard; bool ov_on; float ov_opacity; bool ov_live, ov_voice, ov_status, ov_mute, ov_selfshare, ov_through; int ov_corner;   /* sobreposição: canto 0 sup. direito, 1 sup. esquerdo, 2 inf. direito, 3 inf. esquerdo */
+    bool ov_on; float ov_opacity; bool ov_live, ov_voice, ov_status, ov_mute, ov_selfshare, ov_through; int ov_corner;   /* sobreposição: canto 0 sup. direito, 1 sup. esquerdo, 2 inf. direito, 3 inf. esquerdo */
     char key_mute[24], key_deafen[24], key_stream[24], key_ptt[24];
     bool ptt_on; float ptt_delay;
     bool nt_online, nt_stream;
@@ -72,7 +72,7 @@ static const struct { const char *k; char t; void *p; int cap; } F[] = {
     { "in_vol", 'f', &g_set.in_vol }, { "out_vol", 'f', &g_set.out_vol }, { "noise_off", 'i', &g_set.noise_off }, { "gate_on", 'b', &g_set.gate_on },
     { "gate_db", 'f', &g_set.gate_db }, { "echo", 'b', &g_set.echo }, { "excl_audio", 'b', &g_set.excl_audio }, { "net_pref", 'i', &g_set.net_pref },
     { "call_mode", 'i', &g_set.call_mode }, { "call_mode_set", 'b', &g_set.call_mode_set }, { "fw_choice", 'i', &g_set.fw_choice }, { "ov_on", 'b', &g_set.ov_on }, { "ov_opacity", 'f', &g_set.ov_opacity }, { "ov_live", 'b', &g_set.ov_live },
-    { "sens_guard", 'b', &g_set.sens_guard }, { "ov_voice", 'b', &g_set.ov_voice }, { "ov_status", 'b', &g_set.ov_status }, { "ov_mute", 'b', &g_set.ov_mute }, { "ov_selfshare", 'b', &g_set.ov_selfshare }, { "ov_through", 'b', &g_set.ov_through }, { "ov_corner", 'i', &g_set.ov_corner },
+    { "ov_voice", 'b', &g_set.ov_voice }, { "ov_status", 'b', &g_set.ov_status }, { "ov_mute", 'b', &g_set.ov_mute }, { "ov_selfshare", 'b', &g_set.ov_selfshare }, { "ov_through", 'b', &g_set.ov_through }, { "ov_corner", 'i', &g_set.ov_corner },
     { "key_mute", 's', g_set.key_mute, 24 }, { "key_deafen", 's', g_set.key_deafen, 24 }, { "key_stream", 's', g_set.key_stream, 24 }, { "key_ptt", 's', g_set.key_ptt, 24 },
     { "ptt_on", 'b', &g_set.ptt_on }, { "ptt_delay", 'f', &g_set.ptt_delay }, { "nt_online", 'b', &g_set.nt_online }, { "nt_stream", 'b', &g_set.nt_stream },
     { "telemetry", 'b', &g_set.telemetry }, { "idle_min", 'i', &g_set.idle_min }, { "text_size", 'i', &g_set.text_size },
@@ -85,7 +85,7 @@ static void defaults(void) {
     memset(&g_set, 0, sizeof g_set);
     g_set.text_size = 1; g_set.idle_min = 60;
     g_set.in_vol = 100; g_set.out_vol = 100; g_set.gate_db = -50; g_set.echo = true; g_set.excl_audio = true;
-    g_set.sens_guard = true; g_set.ov_on = true; g_set.ov_opacity = 92; g_set.ov_live = g_set.ov_voice = g_set.ov_status = g_set.ov_mute = g_set.ov_selfshare = g_set.ov_through = true;
+    g_set.ov_on = true; g_set.ov_opacity = 92; g_set.ov_live = g_set.ov_voice = g_set.ov_status = g_set.ov_mute = g_set.ov_selfshare = g_set.ov_through = true;
     g_set.nt_online = g_set.nt_stream = true; g_set.ptt_delay = 200;
     snprintf(g_set.key_mute, sizeof g_set.key_mute, "Ctrl+Shift+M"); snprintf(g_set.key_deafen, sizeof g_set.key_deafen, "Ctrl+Shift+D");
     snprintf(g_set.key_stream, sizeof g_set.key_stream, "Ctrl+Shift+S");
@@ -173,8 +173,6 @@ void settings_overlay(bool *on, float *opacity, int *flags, int *corner) {
     *on = g_set.ov_on; *opacity = g_set.ov_opacity; *corner = g_set.ov_corner < 0 || g_set.ov_corner > 3 ? 0 : g_set.ov_corner;
     *flags = (g_set.ov_live ? 1 : 0) | (g_set.ov_voice ? 2 : 0) | (g_set.ov_status ? 4 : 0) | (g_set.ov_mute ? 8 : 0);
 }
-bool settings_sens_guard(void) { return g_set.sens_guard; }
-void settings_set_sens_guard(bool on) { g_set.sens_guard = on; }
 bool settings_ovl_through(void) { return g_set.ov_through; }   /* 1.5.20: clique atravessa a sobreposição (padrão); desligado, as miniaturas arrastam sem o modo de edição */
 bool settings_ovl_selfshare(void) { return g_set.ov_selfshare; }   /* 1.4.1: aviso "Você está transmitindo a tela" por cima do jogo (padrão ligado) */
 void settings_audio(float *in_gain, float *out_gain, bool *gate_on, float *gate_db) { *in_gain = g_set.in_vol / 100.0f; *out_gain = g_set.out_vol / 100.0f; *gate_on = g_set.gate_on; *gate_db = g_set.gate_db; }
@@ -711,9 +709,6 @@ void settings_dialog(cui_ctx *ui, app_state_t *s) {
                     update_settings_cards(ui, s);   /* ui_update.c: verificar agora + novidades da versão */
                     break;
                 case 9: /* Sobre */
-                    SCARD(ui, "SEGURANÇA") {
-                        sw(ui, "Cobrir transmissões de desconhecidos", "Ligado: a transmissão de quem não é seu amigo começa coberta, com um botão Mostrar. Você pode denunciar ou parar de ver pelo botão direito na transmissão.", &g_set.sens_guard);
-                    }
                     sys_settings_system(ui);   /* winstate.c: fechar para a bandeja e iniciar com o Windows */
                     SCARD(ui, "BRIKS") {
                         cui_text(ui, "Briks", .font = CUI_FONT_DISPLAY, .size = 20);

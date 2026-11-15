@@ -1,13 +1,10 @@
-/* Segurança de conteúdo (1.5.28): transmissões de quem não é amigo começam cobertas; "Parar de ver"; denúncia com registro local. */
+/* Segurança de conteúdo: "Parar de ver" uma transmissão e Denunciar. Sem cobertura automática por não ser amigo. */
 #ifndef BRIKS_SAFETY_H
 #define BRIKS_SAFETY_H
 #include "briks_ui.h"
 
-bool settings_sens_guard(void); void settings_set_sens_guard(bool on);   /* settings.c */
-bool safety_guard_on(void);                                   /* Configurações > Segurança (padrão: ligado) */
-void safety_guard_set(bool on);
 bool safety_is_friend(const app_state_t *s, int slot);        /* o slot da chamada é de um amigo (fp ou id na lista) */
-bool safety_covered(const app_state_t *s, int slot);                /* a transmissão deste slot deve estar coberta agora (desconhecido ainda não revelado, ou "parei de ver") */
+bool safety_covered(const app_state_t *s, int slot);                /* a transmissão deste slot está escondida ("Parar de ver") */
 bool safety_hidden(const app_state_t *s, int slot);                 /* "Parar de ver" ativo para este slot */
 void safety_reveal(app_state_t *s, int slot);                 /* "Mostrar" */
 void safety_hide(app_state_t *s, int slot, bool hide);

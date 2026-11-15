@@ -8,8 +8,6 @@
 static bool g_revealed[BRIKS_MAX_PEERS], g_hidden[BRIKS_MAX_PEERS];
 static char g_rev_id[BRIKS_MAX_PEERS][48];   /* quem o slot era quando foi revelado: outro usuário no mesmo slot volta a ser coberto */
 
-bool safety_guard_on(void) { return settings_sens_guard(); }
-void safety_guard_set(bool on) { settings_set_sens_guard(on); }
 
 bool safety_is_friend(const app_state_t *s, int slot) {
     if (slot < 0 || slot >= BRIKS_MAX_PEERS || !s->rtc_peers[slot].id[0]) return false;
@@ -28,8 +26,7 @@ bool safety_hidden(const app_state_t *s, int slot) { if (slot < 0 || slot >= BRI
 bool safety_covered(const app_state_t *s, int slot) {
     if (slot < 0 || slot >= BRIKS_MAX_PEERS || !s->rtc_peers[slot].id[0]) return false;
     sync_slot(s, slot);
-    if (g_hidden[slot]) return true;
-    return safety_guard_on() && !g_revealed[slot] && !safety_is_friend(s, slot);
+    return g_hidden[slot];   /* só cobre quando a própria pessoa escolheu "Parar de ver" (sem cobertura automática por não ser amigo) */
 }
 void safety_reveal(app_state_t *s, int slot) { if (slot < 0 || slot >= BRIKS_MAX_PEERS) return; sync_slot(s, slot); g_revealed[slot] = true; g_hidden[slot] = false; }
 void safety_hide(app_state_t *s, int slot, bool hide) { if (slot < 0 || slot >= BRIKS_MAX_PEERS) return; sync_slot(s, slot); g_hidden[slot] = hide; if (hide) g_revealed[slot] = false; }

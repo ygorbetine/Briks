@@ -1246,8 +1246,7 @@ static bool video_tile(cui_ctx *ui, int key, cui_texture tex, int tw, int th, co
                 cui_box(ui, .id = "sgcov", .width = CUI_FILL, .height = CUI_FILL, .radius = 20, .bg = CUI_RGBA(0x120620f8), .align = CUI_ALIGN_CENTER, .justify = CUI_JUSTIFY_CENTER, .gap = compact ? 4 : 10, .pad = 12) {
                     cui_icon(ui, hid ? CUI_ICON_EYE_OFF : CUI_ICON_SHIELD, compact ? 18 : 34, B_C3);
                     if (!compact) {
-                        cui_text(ui, hid ? "Você parou de ver esta transmissão." : "Transmissão de alguém que não é seu amigo.", .size = 14, .color = B_MUTED);
-                        if (!hid) cui_text(ui, "Pode ter conteúdo sensível. Veja só se quiser.", .size = 12, .color = B_MUTED);
+                        cui_text(ui, hid ? "Você parou de ver esta transmissão." : "Transmissão escondida.", .size = 14, .color = B_MUTED);
                     }
                     if (cui_button(ui, hid ? "Voltar a ver" : "Mostrar", .variant = CUI_BUTTON_SECONDARY, .size = CUI_SIZE_SM)) safety_reveal(g_vt_s, sgp);
                 }
