@@ -7,6 +7,7 @@
 #include "core.h"
 #include "json.h"
 #include "sysint.h"
+#include "call.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -580,6 +581,10 @@ bool account_handle_event(app_state_t *s, const char *line) {
     else if (!strcmp(ev, "friends.list")) on_friends(s, j);
     else if (!strcmp(ev, "friends.photos")) on_friend_photos(s, j);
     else if (!strcmp(ev, "friends.blocks")) on_blocks(s, j);
+    else if (!strcmp(ev, "report.result")) {   /* 1.5.28: resposta do servidor à denúncia (o registro local já foi gravado) */
+        if (jbool(j, "ok")) call_toast(jbool(j, "evidence") ? "Denúncia enviada ao Briks, com o quadro da transmissão." : "Denúncia enviada ao Briks.");
+        else call_toast(!strcmp(json_str(j, "error_code", ""), "server_not_ready") ? "Denúncia salva neste computador (o servidor ainda não recebe denúncias)." : "Denúncia salva neste computador; não foi possível enviá-la agora.");
+    }
     else if (!strcmp(ev, "presence.list")) on_presence(s, j);
     else if (!strcmp(ev, "friends.lookup")) {
         s->gnick_found = false; s->gnick_msg[0] = 0;

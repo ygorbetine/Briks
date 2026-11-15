@@ -164,6 +164,10 @@ pub struct Friend {
 }
 
 /// Chamadas bloqueantes (rodam em `spawn_blocking`). Nenhuma delas guarda estado de sessão: quem guarda é o `Accounts`.
+/// O que vai numa denúncia (o servidor confere o motivo e limita o tamanho dos textos).
+#[derive(Clone, Debug, Default)]
+pub struct Report { pub fp: String, pub name: String, pub reason: String, pub room: String }
+
 pub trait AuthProvider: Send + Sync {
     /// URL que o navegador abre para o login social com PKCE.
     fn oauth_url(&self, provider: OAuthProvider, redirect_to: &str, challenge: &str) -> String;
@@ -211,6 +215,8 @@ pub trait AuthProvider: Send + Sync {
     fn friend_block(&self, _access_token: &str, _user_id: &str) -> AResult<()> { Err(AccountError::new("server_not_ready", "Bloqueio ainda não disponível no servidor.")) }
     fn friend_unblock(&self, _access_token: &str, _user_id: &str) -> AResult<()> { Err(AccountError::new("server_not_ready", "Bloqueio ainda não disponível no servidor.")) }
     fn blocks(&self, _access_token: &str) -> AResult<Vec<Friend>> { Err(AccountError::new("server_not_ready", "Bloqueio ainda não disponível no servidor.")) }
+    /// Denúncia (migração 0013): grava a denúncia e, se vier, um quadro JPEG da transmissão como prova. Sem a RPC: `server_not_ready`.
+    fn report_submit(&self, _access_token: &str, _user_id: &str, _report: &Report, _evidence: Option<&[u8]>) -> AResult<()> { Err(AccountError::new("server_not_ready", "Denúncias ainda não disponíveis no servidor.")) }
 
     /// Computadores ligados à conta (0009). Sem a RPC: `server_not_ready`.
     fn keys_list(&self, _access_token: &str) -> AResult<Vec<DeviceKey>> { Err(AccountError::new("server_not_ready", "A lista de computadores ainda não está disponível no servidor.")) }

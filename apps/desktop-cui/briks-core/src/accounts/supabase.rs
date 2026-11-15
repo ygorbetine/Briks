@@ -81,6 +81,8 @@ pub fn map_error(status: u16, v: &Value) -> AccountError {
         "invalid_display_name" => return e("invalid_name", "O nome deve ter de 1 a 64 caracteres."),
         "invalid_user" => return e("not_found", "Pessoa inválida."),
         "rate_limited" => return e("rate_limited", "Muitas buscas em pouco tempo. Tente de novo mais tarde."),
+        "too_many_reports" => return e("rate_limited", "Você já fez denúncias demais agora há pouco. Tente de novo mais tarde."),
+        "invalid_reason" => return e("invalid_reason", "Escolha um motivo para a denúncia."),
         "too_many_blocks" => return e("rate_limited", "Você já bloqueou pessoas demais."),
         "key_revoked" => return e("key_revoked", "Este computador foi desconectado da conta."),
         "key_owned_by_other" | "invalid_peer" => return e("server", "O servidor recusou a identificação deste computador."),
@@ -318,6 +320,20 @@ impl AuthProvider for SupabaseProvider {
     }
     fn presence_clear(&self, access_token: &str) -> AResult<()> {
         self.rpc(access_token, "presence_clear", json!({})).map(|_| ())
+    }
+    fn report_submit(&self, access_token: &str, user_id: &str, r: &super::provider::Report, evidence: Option<&[u8]>) -> AResult<()> {
+        // A prova é opcional: se o envio do quadro falhar (bucket ausente, rede), a denúncia segue sem ela.
+        let mut path = Value::Null;
+        if let Some(jpeg) = evidence.filter(|j| !j.is_empty() && j.len() <= 524288) {
+            if crate::netmode::deny_url(&self.base).is_some() { return Err(AccountError::network()); }
+            let tag: String = r.fp.chars().filter(|c| c.is_ascii_alphanumeric()).take(8).collect();
+            let name = format!("{user_id}/{}-{tag}.jpg", now());
+            let res = self.agent.post(&format!("{}/storage/v1/object/report-evidence/{}", self.base, name))
+                .set("apikey", &self.key).set("Authorization", &format!("Bearer {access_token}"))
+                .set("Content-Type", "image/jpeg").send_bytes(jpeg);
+            if res.is_ok() { path = json!(name); }
+        }
+        self.rpc(access_token, "report_submit", json!({ "p_fp": r.fp, "p_name": r.name, "p_reason": r.reason, "p_room": r.room, "p_evidence": path })).map(|_| ())
     }
     fn friend_block(&self, access_token: &str, user_id: &str) -> AResult<()> {
         self.rpc(access_token, "friend_block", json!({ "p_user": user_id })).map(|_| ())

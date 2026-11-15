@@ -36,6 +36,8 @@ pub struct FakeState {
     otps: HashMap<String, String>,                 // "tipo:email" -> código
     pub profiles: HashMap<String, Value>,
     pub objects: HashMap<String, Vec<u8>>,
+    pub reports: Vec<Value>,                       // denúncias recebidas (0013)
+    pub no_reports_rpc: bool,
     pub backups: HashMap<String, Value>,           // cópia cifrada da identidade por conta         // Storage: "<id>/avatar.jpg" -> bytes
     requests: Vec<(String, String, String, bool)>, // id, de, para, aceito
     blocks: Vec<(String, String)>,                 // quem bloqueou, quem foi bloqueado (0006)
@@ -157,7 +159,7 @@ async fn serve(mut s: TcpStream, st: Arc<Mutex<FakeState>>) -> Result<()> {
         let (m, t) = (it.next().unwrap_or(""), it.next().unwrap_or(""));
         let t = t.split('?').next().unwrap_or("");
         let auth = head.lines().find_map(|l| { let (k, v) = l.split_once(':')?; k.eq_ignore_ascii_case("authorization").then(|| v.trim().trim_start_matches("Bearer ").to_string()) }).unwrap_or_default();
-        let reply = if let (true, Some(key)) = (m == "POST", t.strip_prefix("/storage/v1/object/avatars/")) {
+        let reply = if let (true, Some(key)) = (m == "POST", t.strip_prefix("/storage/v1/object/avatars/").or_else(|| t.strip_prefix("/storage/v1/object/report-evidence/"))) {
             let mut g = st.lock().unwrap();
             let owner = g.access.get(&auth).cloned();
             let body = buf[head_end..].to_vec();
@@ -574,6 +576,18 @@ fn rpc(st: &mut FakeState, name: &str, me: &str, b: &Value) -> Resp {
         }
         "friend_block" | "friend_unblock" | "friend_blocks_list" if st.no_blocks_rpc => {
             ("404 Not Found", String::new(), json!({ "code": "PGRST202", "message": "Could not find the function" }))
+        }
+        "report_submit" if st.no_reports_rpc => {
+            ("404 Not Found", String::new(), json!({ "code": "PGRST202", "message": "Could not find the function" }))
+        }
+        "report_submit" => {
+            let reason = b["p_reason"].as_str().unwrap_or("");
+            if !["violencia", "sexual", "odio", "ilegal", "outro"].contains(&reason) { return pg("invalid_reason"); }
+            let mine = st.reports.iter().filter(|r| r["reporter"] == me).count();
+            if mine >= 20 { return pg("too_many_reports"); }
+            let ev = b["p_evidence"].as_str().filter(|e| e.starts_with(&format!("{me}/"))).map(|e| e.to_string());
+            st.reports.push(json!({ "reporter": me, "fp": b["p_fp"], "name": b["p_name"], "reason": reason, "room": b["p_room"], "evidence": ev }));
+            ok(json!("00000000-0000-4000-8000-000000000001"))
         }
         "friend_block" => {
             let other = b["p_user"].as_str().unwrap_or("").to_string();

@@ -1461,3 +1461,34 @@ async fn custom_status_reaches_accepted_friends_expires_and_degrades_without_001
     a.set_status("Estudando", "📚", 3600).await.unwrap();
     assert_eq!(seen_status(&b).await.unwrap(), (Some("Estudando".to_string()), None));
 }
+
+#[tokio::test]
+async fn a_report_is_stored_with_its_evidence_frame_and_is_limited() {
+    let _g = FLOW.lock().await;
+    let f = fake::start(0).await.unwrap();
+    f.state.lock().unwrap().autoconfirm = true;
+    let a = accounts(&f, &tmpdir("rp-a"));
+    let SignUpOutcome::SignedIn(u) = a.sign_up("ana@exemplo.com", "senha-boa-1", "Ana").await.unwrap() else { panic!() };
+    let rep = |reason: &str| Report { fp: "ab12cd34ef56".into(), name: "Fulano".into(), reason: reason.into(), room: "Sala geral".into() };
+    // com o quadro: a prova vai para a pasta da própria pessoa e a denúncia aponta para ela
+    a.report_submit(rep("violencia"), Some(vec![0xff, 0xd8, 0xff, 0xd9])).await.unwrap();
+    {
+        let st = f.state.lock().unwrap();
+        assert_eq!(st.reports.len(), 1);
+        assert_eq!(st.reports[0]["reason"], "violencia");
+        let ev = st.reports[0]["evidence"].as_str().expect("caminho da prova").to_string();
+        assert!(ev.starts_with(&format!("{}/", u.id)), "{ev}");
+        assert!(st.objects.contains_key(&ev), "o quadro foi guardado");
+    }
+    // sem o quadro: vale mesmo assim
+    a.report_submit(rep("odio"), None).await.unwrap();
+    assert!(f.state.lock().unwrap().reports[1]["evidence"].is_null());
+    // motivo inválido é recusado
+    assert_eq!(a.report_submit(rep("spam"), None).await.unwrap_err().code, "invalid_reason");
+    // 20 por hora
+    for _ in 0..18 { a.report_submit(rep("outro"), None).await.unwrap(); }
+    assert_eq!(a.report_submit(rep("outro"), None).await.unwrap_err().code, "rate_limited");
+    // servidor sem a migração 0013: server_not_ready (a UI mantém o registro local)
+    { let mut st = f.state.lock().unwrap(); st.no_reports_rpc = true; }
+    assert_eq!(a.report_submit(rep("outro"), None).await.unwrap_err().code, "server_not_ready");
+}

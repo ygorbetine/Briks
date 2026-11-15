@@ -6,6 +6,7 @@
 //!  - access token: só na memória deste processo, renovado sozinho antes de vencer;
 //!  - chave privada da identidade P2P: NUNCA vai ao servidor; só a chave pública e a impressão digital são publicadas no perfil.
 pub mod avatar;
+pub mod evidence;
 pub mod backup;
 pub mod config;
 pub mod fake;
@@ -465,6 +466,13 @@ impl Accounts {
         let tok = self.access_token().await?;
         let p = self.provider.clone();
         blk(move || p.presence_clear(&tok)).await
+    }
+    /// Denuncia alguém da chamada (migração 0013), com um quadro da transmissão como prova quando houver.
+    pub async fn report_submit(&self, report: provider::Report, evidence: Option<Vec<u8>>) -> AResult<()> {
+        let u = self.user().ok_or_else(AccountError::session_expired)?;
+        let tok = self.access_token().await?;
+        let p = self.provider.clone();
+        blk(move || p.report_submit(&tok, &u.id, &report, evidence.as_deref())).await
     }
     pub async fn friend_block(&self, user_id: &str) -> AResult<()> {
         let tok = self.access_token().await?;

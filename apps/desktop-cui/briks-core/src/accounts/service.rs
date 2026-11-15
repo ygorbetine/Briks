@@ -13,6 +13,7 @@
 //!   friends.photos  {photos:[{user_id,path}]}      fotos dos amigos no cache local (PNG/JPEG), depois de friends.list
 //!   presence.beat {invisible} / presence.friends / presence.clear -> presence.list {remote, friends:[{user_id,online,last_seen}]}   (0007)
 //!   friends.blocks  {remote, blocks:[{user_id,nick,display_name}]}   (friends.block/unblock/blocks {user_id}); remote=false: servidor sem a 0006, vale a lista local da UI
+//!   report.submit {fp, name, reason, room, frame?} -> report.result {ok, evidence, message|error_code}   (0013: denúncia com quadro da transmissão; `frame` = arquivo de quadros)
 //!   account.devices -> account.devices {remote, current, devices:[{peer_id,device_name,created_at,last_used_at}]}   (0009: computadores ligados à conta)
 //!   account.device_revoke {peer_id} -> account.device_result {ok, peer_id, message|error_code} + account.devices
 //!   local.credentials {email, password, name}      ponte com o banco local (nunca a senha da conta)
@@ -276,7 +277,7 @@ impl Service {
 
     /// Devolve true se o comando era deste módulo.
     pub fn command(&mut self, cmd: &str, v: &Value) -> bool {
-        if !(cmd.starts_with("account.") || cmd.starts_with("backup.") || cmd.starts_with("friends.") || cmd.starts_with("import.") || cmd == "local.credentials") {
+        if !(cmd.starts_with("account.") || cmd.starts_with("backup.") || cmd.starts_with("friends.") || cmd.starts_with("report.") || cmd.starts_with("import.") || cmd == "local.credentials") {
             return false;
         }
         let (rt, tx) = (self.rt.clone(), self.tx.clone());
@@ -602,6 +603,22 @@ impl Service {
                         Ok(l) => json!({ "ev": "presence.list", "remote": true, "friends": l }),
                         Err(e) if e.code == "server_not_ready" => json!({ "ev": "presence.list", "remote": false, "friends": [] }),
                         Err(_) => return,   // falha de rede: mantém o que já se sabia; o próximo batimento tenta de novo
+                    };
+                    let _ = tx.send(ev).await;
+                });
+            }
+            "report.submit" => {
+                // denúncia (0013): o quadro da transmissão (se houver) vira JPEG aqui; sem a RPC no servidor, a UI mantém só o registro local
+                let (report, frame) = (super::provider::Report { fp: s("fp"), name: s("name"), reason: s("reason"), room: s("room") }, s("frame"));
+                tokio::spawn(async move {
+                    let evidence = if frame.is_empty() { None } else {
+                        let f = std::path::PathBuf::from(frame);
+                        tokio::task::spawn_blocking(move || super::evidence::jpeg_from_frame_file(&f)).await.ok().flatten()
+                    };
+                    let has = evidence.is_some();
+                    let ev = match acc.report_submit(report, evidence).await {
+                        Ok(()) => json!({ "ev": "report.result", "ok": true, "evidence": has }),
+                        Err(e) => json!({ "ev": "report.result", "ok": false, "error_code": e.code, "message": e.message }),
                     };
                     let _ = tx.send(ev).await;
                 });
