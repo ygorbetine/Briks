@@ -472,6 +472,7 @@ static void empty_state(cui_ctx *ui, const char *icon, const char *title, const 
 /* ---------- indicador de rede (cabeçalho) ---------- */
 static void paint_dot(cui_ctx *ui, cui_rect r, void *user) { cui_draw_rect(ui, r, CUI_CORNERS(r.w * 0.5f), *(const cui_color *)user); }
 static cui_color netq_color(int q) { return q == NETQ_GOOD ? B_ONLINE : q == NETQ_UNSTABLE ? CUI_RGB(0xf5b942) : q == NETQ_DOWN ? B_DANGER : B_MUTED; }
+#define NETPOP_H 336.0f   /* painéis estreitos da CUI têm teto de 420 px (388 + 2 x 16 de margem): o conteúdo rola dentro */
 static void info_row(cui_ctx *ui, const char *k, const char *v) {
     cui_row(ui, .gap = 10, .width = CUI_FILL) { cui_text(ui, k, .size = 13, .color = B_MUTED, .width = CUI_FILL, .nowrap = true); cui_text(ui, v, .size = 13, .nowrap = true); }
 }
@@ -492,6 +493,9 @@ static void net_chip(cui_ctx *ui, app_state_t *s, bool compact) {
     if (briks_hover(ui, "netchip")) briks_tip(compact ? call_net_label(q) : "Ver o diagnóstico da conexão");
     if (briks_clicked(ui, "netchip")) cui_popover_open(ui, "netpop");
     cui_popover(ui, "netpop", .placement = CUI_PLACE_BOTTOM_START, .width = fminf(340.0f, fmaxf(cui_viewport_size(ui).x - 24.0f, 240.0f)), .pad = 16, .gap = 9) {
+      /* o painel não cresce depois de aberto: o conteúdo vai numa área de altura fixa (cabe na janela, rola se não couber) e as linhas do teste existem sempre */
+      cui_scroll(ui, .id = "netsc", .width = CUI_FILL, .height = CUI_PX(fminf(NETPOP_H, fmaxf(cui_viewport_size(ui).y - 150.0f, 160.0f)))) {
+       cui_box(ui, .width = CUI_FILL, .gap = 9) {
         cui_row(ui, .gap = 8, .align = CUI_ALIGN_CENTER) {
             cui_box(ui, .width = CUI_PX(9), .height = CUI_PX(9), .radius = 5, .bg = netq_color(q)) {}
             cui_text(ui, call_net_label(q), .font = CUI_FONT_DISPLAY, .size = 16);
@@ -504,7 +508,7 @@ static void net_chip(cui_ctx *ui, app_state_t *s, bool compact) {
         snprintf(b, sizeof b, "%d (autenticadas: %d)", s->rtc_peer_count, s->rtc_authed_count); info_row(ui, "Pessoas na sala", b);
         if (failed) { snprintf(b, sizeof b, "%d sem conexão direta", failed); info_row(ui, "Falhas", b); }
         { static const char *const CMN[] = { "Automático", "Sempre direto", "Sempre servidor" }; const int cm = settings_call_mode();
-          info_row(ui, "Modo escolhido", CMN[cm < 0 || cm > 2 ? 0 : cm]);
+          (void)CMN; (void)cm;   /* o seletor abaixo já mostra o modo escolhido */
           info_row(ui, "Modo em uso", s->net_failed ? "nenhum (erro)" : net_mode_short(s)[0] ? (s->net_sfu ? "Servidor" : "Direto (ponto a ponto)") : "—"); }
         {   /* trocar o modo daqui mesmo: Automático / Direto / Servidor; com a chamada aberta pede confirmação num diálogo (o popover não cresce depois de aberto) */
             static const char *const MD[] = { "Automático", "Direto", "Servidor" };
@@ -517,12 +521,15 @@ static void net_chip(cui_ctx *ui, app_state_t *s, bool compact) {
         info_row(ui, "Transporte", s->ice_note[0] ? (strstr(s->ice_note, "TURN") && !strstr(s->ice_note, "Somente") ? "STUN + TURN" : "Somente STUN") : "STUN público");
         if (s->rtc_msg[0]) cui_text(ui, s->rtc_msg, .size = 12, .color = B_MUTED);
         cui_separator(ui);
-        if (nd.done) {
-            if (!nd.reachable) cui_text(ui, "O teste não teve resposta: a rede pode bloquear UDP.", .size = 12.5f, .color = B_DANGER);
-            else { snprintf(b, sizeof b, "%.0f ms", nd.st.avg_ms); info_row(ui, "Atraso até o STUN", b); snprintf(b, sizeof b, "%.0f ms", nd.st.jitter_ms); info_row(ui, "Variação", b); snprintf(b, sizeof b, "%.0f%%", nd.st.loss_pct); info_row(ui, "Perda", b); }
-        } else cui_text(ui, "O teste mede atraso, variação e perda até o servidor STUN (uns 3 segundos).", .size = 12.5f, .color = B_MUTED);
-        if (cui_button(ui, nd.running ? "Testando…" : nd.done ? "Testar de novo" : "Testar conexão", .variant = CUI_BUTTON_SECONDARY, .size = CUI_SIZE_SM, .loading = nd.running)) netdiag_start();
-        if (nd.running) cui_request_wakeup(ui, 0.2f);
+        const bool ok = nd.done && nd.reachable;
+        if (nd.done && !nd.reachable) cui_text(ui, "O teste não teve resposta: a rede pode bloquear UDP.", .size = 12.5f, .color = B_DANGER, .width = CUI_FILL);
+        snprintf(b, sizeof b, "%.0f ms", nd.st.avg_ms); info_row(ui, "Atraso até o STUN", ok ? b : "—");
+        snprintf(b, sizeof b, "%.0f ms · %.0f%%", nd.st.jitter_ms, nd.st.loss_pct); info_row(ui, "Variação · perda", ok ? b : "—");
+       }
+      }
+      /* o botão fica fora da área que rola: sempre à vista */
+      if (cui_button(ui, nd.running ? "Testando…" : nd.done ? "Testar de novo" : "Testar conexão (uns 3 s)", .variant = CUI_BUTTON_SECONDARY, .size = CUI_SIZE_SM, .loading = nd.running, .full_width = true)) netdiag_start();
+      if (nd.running) cui_request_wakeup(ui, 0.2f);
     }
     if (g_modechg_close) { g_modechg_close = false; cui_popover_close(ui, "netpop"); }
     if (g_modechg_open) {
