@@ -460,6 +460,8 @@ bool dock_has_panel(int kind);   /* o painel está no layout atual? */
 int dock_probe(const char *name);   /* roteiro: estado do dock para 'expect' */
 int script_probe(const char *name);
 extern int g_script_fail, g_script_rw, g_script_rh;
+extern bool g_script_ctrlshift;
+bool auth_more_visible(void);
 bool dock_script_point(const char *spec, float *x, float *y);   /* roteiro: "grip:chat", "zone:nav:left", "divider:nav"... */
 void dock_script_pick(const char *kind);
 void dock_script_menu(float x, float y);

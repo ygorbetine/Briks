@@ -44,6 +44,23 @@ static bool provider_button(cui_ctx *ui, const char *id, const char *label, cons
     return hit;
 }
 
+/* Opções de entrada extras (modo interno). Quem já está conectado não é afetado: a sessão é restaurada sem passar por esta tela. */
+static bool g_more;
+bool g_script_ctrlshift;   /* roteiro: finge modificadores apertados */
+bool auth_more_visible(void) { return g_more; }
+
+static bool ctrl_shift_down(void) {
+    if (g_script_ctrlshift) return true;
+    return (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000);
+}
+
+static void brand_secret(cui_ctx *ui) {
+    cui_push_id(ui, "brand-secret");
+    cui_box(ui, .id = "b") { briks_brand(ui, 26); }
+    if (briks_clicked_r(ui, "b", 10.0f) && ctrl_shift_down()) g_more = !g_more;
+    cui_pop_id(ui);
+}
+
 static void messages(cui_ctx *ui, app_state_t *s) {
     if (s->acct_error[0]) {
         cui_box(ui, .width = CUI_FILL, .pad_x = 12, .pad_y = 9, .radius = 12, .bg = CUI_RGBA(0xe9555524), .border = 1, .border_color = CUI_RGBA(0xe9555555)) {
@@ -67,18 +84,20 @@ static void view_main(cui_ctx *ui, app_state_t *s) {
     heading(ui, "Entre no Briks", "Conversas que parecem estar na mesma sala.");
     bool on = s->acct_configured;
     if (provider_button(ui, "google", "Continuar com Google", "G", logo(ui, 0), CUI_RGB(0xffffff), CUI_RGB(0x4285f4), CUI_RGB(0xffffff), on)) account_oauth(s, "google");
-    if (provider_button(ui, "discord", "Continuar com Discord", "D", logo(ui, 1), CUI_RGB(0x5865f2), CUI_RGB(0xffffff), CUI_RGB(0x5865f2), on)) account_oauth(s, "discord");
-    cui_text(ui, "Mais rápido e mais seguro: você entra com uma conta que já tem, sem criar outra senha.", .color = B_MUTED, .size = 13);
+    if (g_more && provider_button(ui, "discord", "Continuar com Discord", "D", logo(ui, 1), CUI_RGB(0x5865f2), CUI_RGB(0xffffff), CUI_RGB(0x5865f2), on)) account_oauth(s, "discord");
+    cui_text(ui, g_more ? "Mais rápido e mais seguro: você entra com uma conta que já tem, sem criar outra senha."
+                                : "Mais rápido e mais seguro: você entra com a conta Google, sem criar outra senha.", .color = B_MUTED, .size = 13);
     messages(ui, s);
     cui_gap(ui, 4);
-    cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .gap = 10, .align = CUI_ALIGN_CENTER) {
-        cui_box(ui, .width = CUI_FILL, .height = CUI_PX(1), .radius = 1, .bg = CUI_RGBA(0xffffff1c)) {}
-        cui_text(ui, "ou", .size = 12, .color = B_MUTED);
-        cui_box(ui, .width = CUI_FILL, .height = CUI_PX(1), .radius = 1, .bg = CUI_RGBA(0xffffff1c)) {}
-    }
-    cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .gap = 4, .justify = CUI_JUSTIFY_CENTER) {
-        if (cui_button(ui, "Entrar com e-mail", .variant = CUI_BUTTON_LINK, .size = CUI_SIZE_SM, .disabled = !on)) go(s, AV_LOGIN);
-//         if (cui_button(ui, "Criar conta com e-mail", .variant = CUI_BUTTON_LINK, .size = CUI_SIZE_SM, .disabled = !on)) go(s, AV_SIGNUP);
+    if (g_more) {
+        cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .gap = 10, .align = CUI_ALIGN_CENTER) {
+            cui_box(ui, .width = CUI_FILL, .height = CUI_PX(1), .radius = 1, .bg = CUI_RGBA(0xffffff1c)) {}
+            cui_text(ui, "ou", .size = 12, .color = B_MUTED);
+            cui_box(ui, .width = CUI_FILL, .height = CUI_PX(1), .radius = 1, .bg = CUI_RGBA(0xffffff1c)) {}
+        }
+        cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .gap = 4, .justify = CUI_JUSTIFY_CENTER) {
+            if (cui_button(ui, "Entrar com e-mail", .variant = CUI_BUTTON_LINK, .size = CUI_SIZE_SM, .disabled = !on)) go(s, AV_LOGIN);
+        }
     }
     if (!on && s->acct_state != ACCT_UNKNOWN && cui_button(ui, "Tentar de novo", .variant = CUI_BUTTON_SECONDARY, .full_width = true)) account_retry(s);
 }
@@ -164,7 +183,7 @@ void ui_auth(cui_ctx *ui, app_state_t *s) {
       cui_box(ui, .width = CUI_FILL, .align = CUI_ALIGN_CENTER, .pad_x = 16, .pad_top = top, .pad_bottom = 16) {
         cui_box(ui, .id = "auth-card", .width = CUI_FILL, .max_width = 440, .pad = 36, .gap = 12, .radius = 26,
                 .bg = B_GLASS_STRONG, .border = 1, .border_color = B_A(B_C3, 0x33), .elevation = briks_elev(CUI_ELEVATION_FLOATING)) {
-            briks_brand(ui, 26);
+            brand_secret(ui);
             cui_gap(ui, 12);
             if (s->acct_state == ACCT_UNKNOWN) {
                 heading(ui, "Briks", "Carregando…");

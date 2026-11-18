@@ -69,6 +69,9 @@ void update_dialog(cui_ctx *ui, app_state_t *s) {
 
 typedef struct { const char *version; const char *items[14]; } notes_t;
 static const notes_t NOTES[] = {
+    { "1.5.30", {
+        "Entrada: a tela de login ficou mais simples. Quem já está conectado continua conectado.",
+        NULL } },
     { "1.5.28", {
         "Transmissão: 480p entrou na lista de resoluções, para PCs e redes mais fracos. A adaptação automática também passa por 480p antes de chegar a 360p.",
         "Chamada: o \"SFU\" agora se chama \"Servidor\" e o P2P aparece como \"Direto\" (ponto a ponto), em todo o app.",

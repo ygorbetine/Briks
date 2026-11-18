@@ -139,6 +139,7 @@ void script_tick(cui_ctx *ui) {
         else if (!strcmp(cmd, "up")) { cui_input_mouse_button(ui, CUI_MOUSE_LEFT, false); mdown = false; }
         else if (!strcmp(cmd, "menu")) { char *a = strtok(NULL, " "), *b = strtok(NULL, " "); if (a && b) dock_script_menu((float)atof(a), (float)atof(b)); }
         else if (!strcmp(cmd, "pick")) { char *k = strtok(NULL, " "); if (k) dock_script_pick(k); }
+        else if (!strcmp(cmd, "holdkeys")) { char *a = strtok(NULL, " "); g_script_ctrlshift = a && !strcmp(a, "ctrl+shift"); }
         else if (!strcmp(cmd, "esc")) { cui_input_key(ui, CUI_KEY_ESCAPE, true, 0); esc_up = true; }
         else if (!strcmp(cmd, "type")) { char *r = strtok(NULL, ""); if (r) cui_input_text(ui, r); }
         else if (!strcmp(cmd, "key")) {
