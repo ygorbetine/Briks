@@ -69,6 +69,10 @@ void update_dialog(cui_ctx *ui, app_state_t *s) {
 
 typedef struct { const char *version; const char *items[14]; } notes_t;
 static const notes_t NOTES[] = {
+    { "1.5.31", {
+        "Grupos: o botão de gerar código e o convite pelo botão direito ou pelo painel Membros agora tentam de novo sozinhos e, se não der, dizem o motivo em vez de não fazer nada.",
+        "Grupos: ao convidar alguém com uma operação em andamento, o Briks avisa em vez de adicionar a pessoa na tela sem enviar o convite.",
+        NULL } },
     { "1.5.30", {
         "Entrada: a tela de login ficou mais simples. Quem já está conectado continua conectado.",
         NULL } },

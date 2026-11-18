@@ -665,8 +665,11 @@ async fn handle(s: TcpStream, token: &str, cfg: &Config, accounts: Arc<crate::ac
                     }
                     "group.code" => {
                         let ev = match serde_json::from_value::<crate::group_sync::Snapshot>(v["snapshot"].clone()) {
-                            Ok(s) if crate::group_sync::check_structure(&s).is_ok() => json!({ "ev": "group.result", "op": "code", "ok": true, "group_id": s.group_id, "code": crate::group_sync::to_code(&s) }),
-                            _ => json!({ "ev": "group.result", "op": "code", "ok": false, "message": "grupo inválido" }),
+                            Ok(s) => match crate::group_sync::check_structure(&s) {
+                                Ok(()) => json!({ "ev": "group.result", "op": "code", "ok": true, "group_id": s.group_id, "code": crate::group_sync::to_code(&s) }),
+                                Err(e) => json!({ "ev": "group.result", "op": "code", "ok": false, "message": e.to_string() }),
+                            },
+                            Err(e) => json!({ "ev": "group.result", "op": "code", "ok": false, "message": format!("estado do grupo ilegível ({e})") }),
                         };
                         out(&mut wr, ev).await?;
                     }

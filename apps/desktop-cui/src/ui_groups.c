@@ -245,7 +245,8 @@ static char *snap_build(const app_state_t *s, const group_t *g, long long versio
 }
 
 static void group_publish(app_state_t *s, int gi, bool want_code) {   /* pede ao core para assinar o estado atual do grupo (só dono/administrador) */
-    group_t *g = &s->groups[gi]; if (!g->can_moderate) return;
+    group_t *g = &s->groups[gi];
+    if (!g->can_moderate) { snprintf(s->notice, sizeof s->notice, "Só o dono e os administradores podem gerar o código do grupo."); return; }
     long long ver = 0; free(stored_snap(g, &ver));
     char why[120]; char *snap = snap_build(s, g, ver + 1, why, sizeof why);
     if (!snap) { snprintf(s->notice, sizeof s->notice, "Grupo só neste computador por enquanto: %s.", why); return; }
@@ -387,6 +388,10 @@ void groups_core_event(app_state_t *s, const jval *j, const char *ev) {
         ginvite_signed(s, json_str(j, "group_id", ""), json_str(json_get(j, "snapshot"), "name", ""), json_str(j, "code", ""));   /* "Convidar amigo": o cartão segue pela DM (fila local) */
         if (s->ginv_wait) { s->ginv_short[0] = 0; s->ginv_short_st = 0; s->ginv_short_msg[0] = 0; s->ginv_wait = false; free(s->ginv_code); s->ginv_code = _strdup(json_str(j, "code", "")); s->ginv_open = s->ginv_code != NULL; }
     } else if (!strcmp(op, "code")) {
+        static bool retried;   /* o estado guardado do grupo foi recusado: assina o estado atual uma vez e tenta de novo; se falhar, mostra o motivo */
+        if (!ok && !retried && s->active_group >= 0 && s->active_group < s->group_count) { retried = true; group_publish(s, s->active_group, true); return; }
+        if (!ok) { retried = false; snprintf(s->notice, sizeof s->notice, "Não foi possível gerar o código do grupo: %s", json_str(j, "message", "erro")); return; }
+        retried = false;
         if (ok) { s->ginv_short[0] = 0; s->ginv_short_st = 0; s->ginv_short_msg[0] = 0; free(s->ginv_code); s->ginv_code = _strdup(json_str(j, "code", "")); s->ginv_open = s->ginv_code != NULL; }
     } else if (!strcmp(op, "verify")) {
         const bool invite = !strcmp(json_str(j, "tag", ""), "invite");
@@ -489,10 +494,13 @@ static bool is_member(const group_t *g, const char *id) { for (int i = 0; i < g-
 
 static void add_member(app_state_t *s, int gi, const person_t *p, bool invite) {
     group_t *g = &s->groups[gi];
-    if (!g->can_moderate || g->nm >= GROUP_MAX_MEMBERS || is_member(g, p->id)) return;
+    if (!g->can_moderate || g->nm >= GROUP_MAX_MEMBERS || is_member(g, p->id)) {
+        snprintf(s->notice, sizeof s->notice, !g->can_moderate ? "Só o dono e os administradores podem convidar para o grupo." : is_member(g, p->id) ? "%s já está no grupo." : "O grupo já está cheio.", p->name);
+        return;
+    }
+    if (s->busy) { snprintf(s->notice, sizeof s->notice, "Aguarde a operação em andamento terminar e convide de novo."); return; }   /* antes: adicionava na lista e saía sem salvar nem avisar */
     gmember_t *m = &g->m[g->nm++]; memset(m, 0, sizeof *m); snprintf(m->id, sizeof m->id, "%s", p->id); snprintf(m->name, sizeof m->name, "%s", p->name);
     snprintf(m->fp, sizeof m->fp, "%s", p->fp); snprintf(m->jwk, sizeof m->jwk, "%s", p->jwk);
-    if (s->busy) return;
     if (invite) { for (int i = 0; i < s->friend_count; i++) if (!strcmp(s->friends[i].id, p->id)) { ginvite_expect(p->id, g->id); break; } }   /* amigo: o convite também vai pela conversa */
     group_save_ex(s, gi, NULL); group_publish(s, gi, invite);
 }
