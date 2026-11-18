@@ -21,15 +21,15 @@ do usuário (build, tag e release só com autorização). Tudo precisa funcionar
 ## Frente B: medir antes de decidir (sem mudar comportamento)
 Medir numa transmissão real de 2 PCs, 1080p30 e 1440p60: CPU/GPU de quem transmite, tempo do encode, bitrate enviado x pedido,
 PLI e NACK por minuto, encoder (hardware ou software), decode do espectador.
-- [ ] Ler a telemetria que já existe (`quality_chip`, contadores de NACK/PLI em `adapt.rs`) e registrar os números aqui.
-- [ ] Verificar se `capture.rs` copia quadros pela CPU em telas grandes.
+- [ ] (precisa de 2 PCs e GPU; `scripts/medir-transmissao.ps1` mede CPU e uso de GPU/codificador) Ler a telemetria que já existe (`quality_chip`, contadores de NACK/PLI em `adapt.rs`) e registrar os números aqui.
+- [x] Captura: já converte BGRA para NV12 e reduz na GPU (`gpuconv.rs`); só o quadro reduzido volta para a memória (`capture.rs`, `BRIKS_CONVERT=cpu` força o caminho antigo). Candidato 4 descartado, a menos que a medição real mostre cópia pela CPU.
 - [ ] Verificar o custo da redução no receptor com duas transmissões (dois monitores).
 
 ## Frente C: candidatos (cada um só vira tarefa com número da frente B)
 1. Prioridade nitidez x fluidez: hoje o fps nunca cai e a resolução desce até 360p; opção de segurar resolução e abaixar o fps.
 2. Simulcast no SFU (várias camadas por transmissão): maior ganho para espectadores diferentes, maior custo de encode.
 3. Hardware no encode e no decode: medir quantos PCs caem em software.
-4. Captura e conversão 100% na GPU em 1440p/4K.
+4. ~~Captura e conversão 100% na GPU em 1440p/4K.~~ Já é assim (ver frente B).
 5. Quadros-chave: intra refresh no encoder de hardware para suavizar picos (sondado em `mfenc.rs`).
 6. Redução no receptor com duas transmissões.
 
