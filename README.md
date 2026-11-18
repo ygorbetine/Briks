@@ -12,6 +12,19 @@
 
 Installers (Windows 10/11) are published on the [GitHub Releases page](https://github.com/ygorbetine/Briks/releases/latest). The app updates itself from there.
 
+## Aviso: o Windows pode apontar o Briks como "falso positivo"
+
+O Briks **ainda não tem certificado de assinatura de código** (o certificado é pago e exige reputação do programa; estamos atrás de uma solução). Sem ele, o Windows pode estranhar o instalador ou o app, mesmo ele sendo seguro:
+
+- **SmartScreen** ("O Windows protegeu seu computador"): clique em **Mais informações** e depois em **Executar assim mesmo**.
+- **Microsoft Defender** pode marcar o arquivo como ameaça por engano (já apareceu como `Trojan:Win32/Bearfoos.A!ml`, uma detecção automática por aprendizado de máquina). É um **falso positivo**. Se o arquivo sumir ou for bloqueado, abra *Segurança do Windows > Proteção contra vírus e ameaças > Histórico de proteção*, restaure o arquivo e permita-o, ou baixe de novo.
+- Baixe **somente** pela [página oficial de Releases](https://github.com/ygorbetine/Briks/releases/latest). O código é aberto (AGPL-3.0) e você pode compilar o app sozinho (veja "Instalar e rodar" abaixo).
+- Quer ajudar? Envie o arquivo à Microsoft como "não é uma ameaça" em <https://www.microsoft.com/wdsi/filesubmission>. Cada envio ajuda o Briks a ganhar reputação.
+
+Se tiver qualquer dúvida, abra uma [issue](https://github.com/ygorbetine/Briks/issues).
+
+**English:** Briks is not code-signed yet (certificates are paid and require reputation), so Windows SmartScreen or Microsoft Defender may flag the installer as a **false positive**. For SmartScreen choose *More info > Run anyway*; if Defender quarantines the file, restore it from *Protection history*. Download only from the official [Releases page](https://github.com/ygorbetine/Briks/releases/latest); the source code is open (AGPL-3.0) and you can build it yourself.
+
 ## Code signing policy
 
 Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org). *(Applies from the first release signed through SignPath; earlier releases are unsigned.)*
