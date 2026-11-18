@@ -476,7 +476,8 @@ static void info_row(cui_ctx *ui, const char *k, const char *v) {
     cui_row(ui, .gap = 10, .width = CUI_FILL) { cui_text(ui, k, .size = 13, .color = B_MUTED, .width = CUI_FILL, .nowrap = true); cui_text(ui, v, .size = 13, .nowrap = true); }
 }
 /* modo em uso na chamada (vem do net.mode do core): "SFU", "P2P" ou "" quando ainda não se sabe */
-static const char *net_mode_short(const app_state_t *s) { return !s->in_room || !s->net_note[0] ? "" : s->net_sfu ? "SFU" : s->net_failed ? "" : "P2P"; }
+static const char *net_mode_short(const app_state_t *s) { return !s->in_room || !s->net_note[0] ? "" : s->net_sfu ? "Servidor" : s->net_failed ? "" : "Direto"; }
+static bool g_modechg_open, g_modechg_close; static int g_modechg_pend;   /* diálogo "Trocar o modo da chamada" */
 static void net_chip(cui_ctx *ui, app_state_t *s, bool compact) {
     netdiag_t nd = netdiag_get();
     int failed = 0; for (int i = 0; i < BRIKS_MAX_PEERS; i++) if (s->rtc_peers[i].id[0] && !strcmp(s->rtc_peers[i].state, "falhou")) failed++;
@@ -490,7 +491,7 @@ static void net_chip(cui_ctx *ui, app_state_t *s, bool compact) {
     }
     if (briks_hover(ui, "netchip")) briks_tip(compact ? call_net_label(q) : "Ver o diagnóstico da conexão");
     if (briks_clicked(ui, "netchip")) cui_popover_open(ui, "netpop");
-    cui_popover(ui, "netpop", .placement = CUI_PLACE_BOTTOM_START, .width = 340, .pad = 16, .gap = 9) {
+    cui_popover(ui, "netpop", .placement = CUI_PLACE_BOTTOM_START, .width = fminf(340.0f, fmaxf(cui_viewport_size(ui).x - 24.0f, 240.0f)), .pad = 16, .gap = 9) {
         cui_row(ui, .gap = 8, .align = CUI_ALIGN_CENTER) {
             cui_box(ui, .width = CUI_PX(9), .height = CUI_PX(9), .radius = 5, .bg = netq_color(q)) {}
             cui_text(ui, call_net_label(q), .font = CUI_FONT_DISPLAY, .size = 16);
@@ -502,9 +503,17 @@ static void net_chip(cui_ctx *ui, app_state_t *s, bool compact) {
         info_row(ui, "Sinalização", s->in_room ? (s->rtc_state[0] ? s->rtc_state : "conectando") : "fora da sala");
         snprintf(b, sizeof b, "%d (autenticadas: %d)", s->rtc_peer_count, s->rtc_authed_count); info_row(ui, "Pessoas na sala", b);
         if (failed) { snprintf(b, sizeof b, "%d sem conexão direta", failed); info_row(ui, "Falhas", b); }
-        { static const char *const CMN[] = { "Automático", "Sempre P2P", "Sempre SFU" }; const int cm = settings_call_mode();
+        { static const char *const CMN[] = { "Automático", "Sempre direto", "Sempre servidor" }; const int cm = settings_call_mode();
           info_row(ui, "Modo escolhido", CMN[cm < 0 || cm > 2 ? 0 : cm]);
-          info_row(ui, "Modo em uso", s->net_failed ? "nenhum (erro)" : net_mode_short(s)[0] ? (s->net_sfu ? "SFU (servidor)" : "P2P (direto)") : "—"); }
+          info_row(ui, "Modo em uso", s->net_failed ? "nenhum (erro)" : net_mode_short(s)[0] ? (s->net_sfu ? "Servidor" : "Direto (ponto a ponto)") : "—"); }
+        {   /* trocar o modo daqui mesmo: Automático / Direto / Servidor; com a chamada aberta pede confirmação num diálogo (o popover não cresce depois de aberto) */
+            static const char *const MD[] = { "Automático", "Direto", "Servidor" };
+            int sel = settings_call_mode();
+            cui_text(ui, "Trocar o modo da chamada", .size = 12.5f, .color = B_MUTED);
+            if (cui_segmented(ui, "netmode", MD, 3, &sel, .full_width = true, .size = CUI_SIZE_SM) && sel != settings_call_mode()) {
+                if (s->in_room) { g_modechg_pend = sel; g_modechg_open = true; g_modechg_close = true; } else settings_call_mode_set(sel);
+            }
+        }
         info_row(ui, "Transporte", s->ice_note[0] ? (strstr(s->ice_note, "TURN") && !strstr(s->ice_note, "Somente") ? "STUN + TURN" : "Somente STUN") : "STUN público");
         if (s->rtc_msg[0]) cui_text(ui, s->rtc_msg, .size = 12, .color = B_MUTED);
         cui_separator(ui);
@@ -514,6 +523,23 @@ static void net_chip(cui_ctx *ui, app_state_t *s, bool compact) {
         } else cui_text(ui, "O teste mede atraso, variação e perda até o servidor STUN (uns 3 segundos).", .size = 12.5f, .color = B_MUTED);
         if (cui_button(ui, nd.running ? "Testando…" : nd.done ? "Testar de novo" : "Testar conexão", .variant = CUI_BUTTON_SECONDARY, .size = CUI_SIZE_SM, .loading = nd.running)) netdiag_start();
         if (nd.running) cui_request_wakeup(ui, 0.2f);
+    }
+    if (g_modechg_close) { g_modechg_close = false; cui_popover_close(ui, "netpop"); }
+    if (g_modechg_open) {
+        static const char *const MN[] = { "Automático", "Direto (ponto a ponto)", "Servidor" };
+        cui_dialog(ui, "Trocar o modo da chamada", &g_modechg_open, .width = fminf(520.0f, fmaxf(cui_viewport_size(ui).x - 32.0f, 280.0f))) {
+            cui_textf(ui, "Mudar para: %s", MN[g_modechg_pend < 0 || g_modechg_pend > 2 ? 0 : g_modechg_pend]);
+            cui_text(ui, "Trocar agora reconecta a chamada (um corte de alguns segundos). Todos da sala precisam estar no mesmo modo.", .size = 12.5f, .color = B_MUTED, .width = CUI_FILL);
+            cui_dialog_footer(ui) {
+                if (cui_button(ui, "Cancelar", .variant = CUI_BUTTON_SECONDARY)) g_modechg_open = false;
+                if (cui_button(ui, "Na próxima chamada", .variant = CUI_BUTTON_SECONDARY)) { settings_call_mode_set(g_modechg_pend); g_modechg_open = false; }
+                if (cui_button(ui, "Trocar agora", .variant = CUI_BUTTON_PRIMARY)) {
+                    char room[sizeof s->room_name]; snprintf(room, sizeof room, "%s", s->room_name);
+                    settings_call_mode_set(g_modechg_pend); g_modechg_open = false;
+                    rtc_leave_room(s); s->rtc_session_sent = s->rtc_session_ready; rtc_join_room(s, room);
+                }
+            }
+        }
     }
 }
 
@@ -860,10 +886,10 @@ void ui_call(cui_ctx *ui, app_state_t *s) {
                         cui_icon(ui, CUI_ICON_PHONE, 18, CUI_RGB(0xf5a524));
                         cui_column(ui, .gap = 2, .width = CUI_FILL) {
                             cui_text(ui, s->rtc_msg[0] ? s->rtc_msg : "Não foi possível entrar pelo servidor de chamadas.", .size = 14);
-                            cui_text(ui, "Você ainda não está na chamada. Em P2P você só fala com quem também entrar em P2P.", .size = 12, .color = B_MUTED);
+                            cui_text(ui, "Você ainda não está na chamada. No modo direto (ponto a ponto) você só fala com quem também entrar no modo direto.", .size = 12, .color = B_MUTED);
                         }
                         if (cui_button(ui, "Tentar de novo")) { char room[sizeof s->room_name]; snprintf(room, sizeof room, "%s", s->room_name); s->net_failed = false; s->rtc_session_sent = s->rtc_session_ready; rtc_join_room(s, room); }
-                        if (cui_button(ui, "Usar P2P agora", .variant = CUI_BUTTON_PRIMARY)) rtc_join_p2p(s);
+                        if (cui_button(ui, "Usar modo direto agora", .variant = CUI_BUTTON_PRIMARY)) rtc_join_p2p(s);
                     }
                 }
                 if (s->in_room && s->rtc_overflow > 0 && s->call_view != 1) {

@@ -805,7 +805,7 @@ impl Actor {
                     None => self.emit(MeshEvent::Error("assistir: peer desconhecido".into())).await,
                 }
             }
-            MeshCmd::RemoteMute { .. } => self.emit(MeshEvent::Error("mudo remoto só existe no modo SFU".into())).await,
+            MeshCmd::RemoteMute { .. } => self.emit(MeshEvent::Error("mudo remoto só existe no modo servidor".into())).await,
             MeshCmd::Close => {}
         }
     }

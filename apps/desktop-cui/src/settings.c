@@ -48,6 +48,7 @@ typedef struct {
 } settings_t;
 settings_t g_set;
 int settings_call_mode(void) { return g_set.call_mode; }
+void settings_call_mode_set(int mode) { if (mode < 0 || mode > 2) return; g_set.call_mode = mode; g_set.call_mode_set = true; }
 int settings_idle_min(void) { return g_set.idle_min < 0 ? 0 : g_set.idle_min; }
 int settings_net_pref(void) { return g_set.net_pref; }
 int settings_fw_choice(void) { return g_set.fw_choice; }
@@ -521,7 +522,7 @@ void settings_dialog(cui_ctx *ui, app_state_t *s) {
                     }
                     break;
                 case 1: { /* Rede */
-                    static const char *CM[] = { "Automático", "Sempre P2P", "Sempre SFU" };
+                    static const char *CM[] = { "Automático", "Sempre direto", "Sempre servidor" };
                     static const char *NP[] = { "Automático", "Internet direta", "VPN privada" };
                     SCARD(ui, "MODO DA CHAMADA") {
                         static int pend_cm = -1;   /* troca pedida com a chamada aberta: espera a confirmação (reconecta) */
@@ -541,9 +542,9 @@ void settings_dialog(cui_ctx *ui, app_state_t *s) {
                                 if (cui_button(ui, "Cancelar", .variant = CUI_BUTTON_LINK, .size = CUI_SIZE_SM)) pend_cm = -1;
                             }
                         }
-                        sub(ui, g_set.call_mode == 0 ? "Padrão: usa o servidor de chamadas (SFU) quando ele está configurado; sem ele, P2P. Se o servidor falhar, mostra o erro e oferece entrar em P2P; nunca troca sozinho." : g_set.call_mode == 1 ? "Conexão direta entre todos, até 8 pessoas. Sem servidor no meio, mesmo com o servidor de chamadas configurado." : "Passa sempre pelo servidor, nunca cai em P2P sozinho. Melhor para salas grandes e redes difíceis.");
+                        sub(ui, g_set.call_mode == 0 ? "Padrão: usa o servidor de chamadas quando ele está configurado; sem ele, modo direto (ponto a ponto). Se o servidor falhar, mostra o erro e oferece entrar no modo direto; nunca troca sozinho." : g_set.call_mode == 1 ? "Conexão direta entre todos, até 8 pessoas. Sem servidor no meio, mesmo com o servidor de chamadas configurado." : "Passa sempre pelo servidor, nunca cai no modo direto sozinho. Melhor para salas grandes e redes difíceis.");
                         sub(ui, "Todos da sala precisam usar o mesmo modo. Vale a partir da próxima chamada.");
-                        if (s->net_cfg_known) sub(ui, s->net_cfg_err[0] ? s->net_cfg_err : s->net_cfg_sfu ? "Servidor de chamadas: configurado." : g_set.call_mode == 2 ? "Servidor de chamadas: não configurado; \"Sempre SFU\" usa P2P até configurar." : "Servidor de chamadas: não configurado; as chamadas usam P2P.");
+                        if (s->net_cfg_known) sub(ui, s->net_cfg_err[0] ? s->net_cfg_err : s->net_cfg_sfu ? "Servidor de chamadas: configurado." : g_set.call_mode == 2 ? "Servidor de chamadas: não configurado; \"Sempre servidor\" usa o modo direto até configurar." : "Servidor de chamadas: não configurado; as chamadas usam o modo direto (ponto a ponto).");
                     }
                     SCARD(ui, "PREFERÊNCIA DE CONEXÃO") {
                         seg(ui, "cfg-np", NP, 3, &g_set.net_pref);

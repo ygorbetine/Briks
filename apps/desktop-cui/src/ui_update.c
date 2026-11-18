@@ -69,6 +69,13 @@ void update_dialog(cui_ctx *ui, app_state_t *s) {
 
 typedef struct { const char *version; const char *items[14]; } notes_t;
 static const notes_t NOTES[] = {
+    { "1.5.28", {
+        "Transmissão: 480p entrou na lista de resoluções, para PCs e redes mais fracos. A adaptação automática também passa por 480p antes de chegar a 360p.",
+        "Chamada: o \"SFU\" agora se chama \"Servidor\" e o P2P aparece como \"Direto\" (ponto a ponto), em todo o app.",
+        "Chamada: dá para trocar o modo (Automático, Direto ou Servidor) pelo menu da qualidade da conexão, no topo da chamada. Com a chamada aberta, o Briks pede confirmação antes de reconectar.",
+        "Transmissão: \"Parar de ver\" e \"Denunciar\" no menu de cada transmissão. A denúncia vai ao Briks com um quadro da transmissão (quando o servidor aceita) e fica registrada no seu computador.",
+        "Aviso: o Briks ainda não tem certificado de assinatura de código, então o Windows pode apontá-lo como falso positivo. Detalhes no README do GitHub.",
+        NULL } },
     { "1.5.27", {
         "Chamada P2P: com 3 ou mais pessoas a conexão fecha em até 0,5 s (antes 1 a 2 s).",
         "Chamada P2P: quem desliga some da chamada na hora, sem esperar o prazo de presença.",
@@ -106,14 +113,14 @@ static const notes_t NOTES[] = {
         "Transmissão: a taxa de quadros escolhida não cai mais; quando falta rede ou PC, cai só a resolução e o bitrate. Envio em cadência fixa e adaptação sem vaivém.",
         "Aviso \"começou a transmitir\": o botão Assistir agora responde ao clique.",
         "Transmissões: nome, qualidade e volume só aparecem quando o mouse está em cima.",
-        "Ao entrar numa chamada que já tem gente, o Briks escolhe sozinho entre servidor (SFU) e P2P.",
+        "Ao entrar numa chamada que já tem gente, o Briks escolhe sozinho entre servidor e P2P.",
         "Chamada em servidor: reconexão mais calma e reaproveitamento do acesso, sem estourar o limite.",
         "Overlay: arraste as transmissões direto, sem modo de edição; nova opção Atravessar cliques (ligada); imagem mais nítida e fluida.",
         "Overlay: a opção Transmissão só aparece quando alguém está transmitindo.",
         "Volume: silenciar a voz não cala a transmissão, e a transmissão só toca depois de você assistir.",
         NULL } },
     { "1.5.19", {
-        "Chamada em servidor (SFU): corrigida a reconexão infinita; o servidor passou a exigir outro papel no handshake de segurança e o Briks agora responde do jeito certo.",
+        "Chamada em servidor: corrigida a reconexão infinita; o servidor passou a exigir outro papel no handshake de segurança e o Briks agora responde do jeito certo.",
         "A confirmação de idade agora é gravada: o diálogo aparece uma vez por conta, não a cada entrada.",
         NULL } },
     { "1.5.18", {
@@ -157,7 +164,7 @@ static const notes_t NOTES[] = {
         NULL } },
     { "1.5.9", {
         "Transmissão: a miniatura desfocada de tijolos também aparece no seu bloco \"Você\" enquanto você transmite.",
-        "Transmissão: o olhinho de espectadores agora aparece para todos na chamada, no ponto a ponto e no servidor (SFU).",
+        "Transmissão: o olhinho de espectadores agora aparece para todos na chamada, no ponto a ponto e no servidor.",
         "Sons: o seletor de emojis do editor \"Adicionar som\" agora abre na frente do diálogo.",
         "Sons: corrigido o armazenamento que podia nascer vazio ou temporário; sons ausentes mostram \"esse som não está neste aparelho\".",
         NULL } },
@@ -167,7 +174,7 @@ static const notes_t NOTES[] = {
         "Amigos: o estado vazio da lista de amigos ganhou uma ilustração de tijolos.",
         NULL } },
     { "1.5.7", {
-        "Transmissão: o seletor de codec (H.264, VP9 ou VP8) agora vale também no servidor de chamadas (SFU); antes só funcionava no ponto a ponto. O codec de cada tela é definido na primeira transmissão da chamada.",
+        "Transmissão: o seletor de codec (H.264, VP9 ou VP8) agora vale também no servidor de chamadas; antes só funcionava no ponto a ponto. O codec de cada tela é definido na primeira transmissão da chamada.",
         "Atualização: o botão de download ao lado do minimizar abre uma janela que mostra o progresso do download e, quando termina, oferece Reiniciar e instalar.",
         "Grupos: a seta ao lado do nome do grupo agora também abre o grupo na primeira vez (antes só o clique no nome abria).",
         NULL } },
@@ -198,7 +205,7 @@ static const notes_t NOTES[] = {
         "Sobreposição: 30 fps e selo Ao vivo com tamanho fixo e alinhado.",
         NULL } },
     { "1.4.4", {
-        "Chamadas: o servidor de chamadas (SFU) do Briks vem configurado no instalador; no modo Automático o app usa o servidor quando ele existe e cai para ponto a ponto quando não.",
+        "Chamadas: o servidor de chamadas do Briks vem configurado no instalador; no modo Automático o app usa o servidor quando ele existe e cai para ponto a ponto quando não.",
         "Transmissão: se o codificador de vídeo falhar, a transmissão se recupera sozinha (com aviso discreto) em vez de cair; o aviso de PC sem conta só aparece com sinal real de máquina lenta.",
         "Transmissão: escolha de codec (H.264, VP9 ou VP8) nas chamadas ponto a ponto, com queda automática para H.264 se alguém não decodificar; no servidor de chamadas segue H.264.",
         "Transmissão: clique no bloco abre em Foco, painel de qualidade que se adapta à janela, seletor de emoji com busca e participantes com avatar de quem transmite.",
@@ -235,7 +242,7 @@ static const notes_t NOTES[] = {
         "Barra de título própria com minimizar, maximizar e fechar, e botão Verificar agora em Atualizações.",
         "Teste de rede com STUN e relay, TURN da sua conta ou o seu próprio, e detecção de ZeroTier, Tailscale e WireGuard.",
         "Câmera na chamada (beta), com prévia em Configurações, e avisos quando o microfone está negado, ausente ou em uso.",
-        "Transmissão de tela (beta), com segunda tela e zoom, e servidor de chamadas SFU (beta).",
+        "Transmissão de tela (beta), com segunda tela e zoom, e servidor de chamadas (beta).",
         NULL } },
     { "1.3.0", { "Primeira versão nativa do Briks: login, amigos, chat e chamadas ponto a ponto.", NULL } },
 };

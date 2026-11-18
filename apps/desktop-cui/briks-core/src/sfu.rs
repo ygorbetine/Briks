@@ -903,14 +903,14 @@ impl Actor {
                     self.send(rq::Message::Answer(lk::SessionDescription { r#type: "answer".into(), sdp: ans.sdp, id: o.id, mid_to_track_id: Default::default() })).await;
                     Ok(())
                 }.await;
-                if let Err(e) = r { self.emit(MeshEvent::Error(format!("resposta ao SFU: {e}"))).await; }
+                if let Err(e) = r { self.emit(MeshEvent::Error(format!("resposta ao servidor: {e}"))).await; }
             }
             rs::Message::Answer(a) => {
                 crate::netlog::write(&format!("sfu answer pub: {}", a.sdp.lines().find(|l| l.starts_with("a=setup:")).unwrap_or("?")));
                 #[cfg(test)]
                 let a = { let mut a = a; a.sdp = self.sim_in_sdp(a.sdp).await; a };
                 if let Some(pc) = self.publisher.clone() {
-                    match RTCSessionDescription::answer(a.sdp) { Ok(d) => { if let Err(e) = pc.set_remote_description(d).await { self.emit(MeshEvent::Error(format!("answer do SFU: {e}"))).await; } } Err(e) => self.emit(MeshEvent::Error(format!("answer inválida: {e}"))).await }
+                    match RTCSessionDescription::answer(a.sdp) { Ok(d) => { if let Err(e) = pc.set_remote_description(d).await { self.emit(MeshEvent::Error(format!("answer do servidor: {e}"))).await; } } Err(e) => self.emit(MeshEvent::Error(format!("answer inválida: {e}"))).await }
                     self.flush_ice(0).await;
                 }
                 self.pub_offering = false;
@@ -1203,9 +1203,9 @@ impl Actor {
             MeshCmd::CancelFile { .. } | MeshCmd::AcceptFile { .. } | MeshCmd::PauseFile { .. } | MeshCmd::Typing | MeshCmd::GroupSend { .. } | MeshCmd::RoomChat { .. } | MeshCmd::StreamRequest { .. } | MeshCmd::StreamReply { .. } => {}
             #[cfg(test)]
             MeshCmd::HistSeed { .. } | MeshCmd::HistAsk => {}
-            MeshCmd::Chat { .. } | MeshCmd::ChatWithId { .. } | MeshCmd::ChatInvite { .. } | MeshCmd::Event { .. } => self.emit(MeshEvent::Error("chat não disponível no modo SFU (use uma sala P2P)".into())).await,
+            MeshCmd::Chat { .. } | MeshCmd::ChatWithId { .. } | MeshCmd::ChatInvite { .. } | MeshCmd::Event { .. } => self.emit(MeshEvent::Error("chat não disponível no modo servidor (use uma sala P2P)".into())).await,
             MeshCmd::Kick { .. } | MeshCmd::Allow { .. } => self.emit(MeshEvent::Error("expulsar exige a API de administração do LiveKit: ainda não disponível".into())).await,
-            MeshCmd::RemoteMute { .. } => self.emit(MeshEvent::Error("mudo remoto exige a camada de dados do SFU".into())).await,
+            MeshCmd::RemoteMute { .. } => self.emit(MeshEvent::Error("mudo remoto exige a camada de dados do servidor".into())).await,
             MeshCmd::ForceOffer { .. } | MeshCmd::SetHybrid { .. } | MeshCmd::DmDisconnect { .. } => {}
             #[cfg(test)]
             MeshCmd::KickUnchecked { .. } => {}

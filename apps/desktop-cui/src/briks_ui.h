@@ -350,6 +350,7 @@ bool fw_busy(void); bool fw_open(void); int fw_exists(void); const char *fw_msg(
 int settings_net_pref(void);                               /* 0 Automático, 1 Internet direta, 2 VPN privada */
 int settings_idle_min(void);                              /* CHM-35: minutos sem falar até sair da chamada (0 = nunca) */
 int settings_call_mode(void);                              /* 0 Automático, 1 P2P, 2 SFU (Configurações > Rede) */
+void settings_call_mode_set(int mode);                        /* escolha explícita do usuário (Configurações > Rede e menu da qualidade da conexão na call) */
 void settings_audio(float *in_gain, float *out_gain, bool *gate_on, float *gate_db);   /* ganhos 0..1 (1 = normal) e porta de ruído, para o core */
 void settings_audio_ex(char *mic, size_t mic_cap, char *out, size_t out_cap, int *noise_off);   /* dispositivos escolhidos (nome; vazio = padrão) e supressão de ruído (1 = desligada) */
 void rtc_mic_test(app_state_t *s, bool on);               /* rtc.c: teste do microfone fora da chamada (eventos mic.test) */

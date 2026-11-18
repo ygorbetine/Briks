@@ -881,8 +881,8 @@ static bool quality_controls(cui_ctx *ui, share_state_t *q) {
         cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .gap = 6, .wrap = true, .justify = CUI_JUSTIFY_BETWEEN, .align = CUI_ALIGN_CENTER) {
             cui_column(ui, .gap = 1, .width = CUI_FILL) {
                 wrap_line(ui, "Codec de vídeo", 13, B_MUTED);
-                wrap_line(ui, q->codec == 1 ? "VP9: imagem mais nítida com a mesma internet, mas pesa mais no processador. Vale no servidor de chamadas e no P2P; no P2P, se alguém não conseguir abrir, o Briks volta sozinho ao H.264. Depois da 1ª transmissão da chamada, trocar o codec só vale na próxima chamada."
-                     : q->codec == 2 ? "VP8: mais antigo e leve, bom para PCs fracos, com qualidade um pouco menor. Vale no servidor de chamadas e no P2P; no P2P, se alguém não conseguir abrir, volta ao H.264. Depois da 1ª transmissão da chamada, trocar o codec só vale na próxima chamada."
+                wrap_line(ui, q->codec == 1 ? "VP9: imagem mais nítida com a mesma internet, mas pesa mais no processador. Vale no servidor de chamadas e no modo direto; no modo direto, se alguém não conseguir abrir, o Briks volta sozinho ao H.264. Depois da 1ª transmissão da chamada, trocar o codec só vale na próxima chamada."
+                     : q->codec == 2 ? "VP8: mais antigo e leve, bom para PCs fracos, com qualidade um pouco menor. Vale no servidor de chamadas e no modo direto; no modo direto, se alguém não conseguir abrir, volta ao H.264. Depois da 1ª transmissão da chamada, trocar o codec só vale na próxima chamada."
                      : "H.264: o mais comum. Funciona em qualquer PC, usa a placa de vídeo para não pesar e vale também no servidor de chamadas. Na dúvida, fique com ele.", 11, CUI_RGBA(0xa592b8aa));
             }
             static const char *const cd[3] = { "H.264", "VP9", "VP8" };
@@ -893,7 +893,7 @@ static bool quality_controls(cui_ctx *ui, share_state_t *q) {
             static const char *const nm[3] = { "H.264", "VP9", "VP8" };
             char cl[200];
             if (on == q->codec) snprintf(cl, sizeof cl, "Em uso agora: %s", nm[on]);
-            else snprintf(cl, sizeof cl, "Em uso agora: %s. %s só vale na próxima chamada, ou se todos na chamada o abrirem (no P2P).", nm[on], nm[q->codec]);
+            else snprintf(cl, sizeof cl, "Em uso agora: %s. %s só vale na próxima chamada, ou se todos na chamada o abrirem (no modo direto).", nm[on], nm[q->codec]);
             wrap_line(ui, cl, 11, on == q->codec ? CUI_RGBA(0x8fd9a8cc) : CUI_RGBA(0xf0c26ecc));
         }
         cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .gap = 6, .wrap = true, .justify = CUI_JUSTIFY_BETWEEN, .align = CUI_ALIGN_CENTER) {

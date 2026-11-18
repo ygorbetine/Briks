@@ -409,7 +409,7 @@ async fn handle(s: TcpStream, token: &str, cfg: &Config, accounts: Arc<crate::ac
                             // "Sempre SFU" sem servidor configurado: erro visível, nunca uma sala P2P à parte
                             let (_, reason) = crate::sfu_cfg::decide(net_mode, false, false, false);
                             out(&mut wr, json!({ "ev": "net.mode", "mode": "none", "reason": reason, "error": sfu_err, "configured": false, "fallback": false })).await?;
-                            out(&mut wr, json!({ "ev": "error", "where": "room.join", "message": "Modo \"Sempre SFU\": o servidor de chamadas não está configurado." })).await?;
+                            out(&mut wr, json!({ "ev": "error", "where": "room.join", "message": "Modo \"Sempre servidor\": o servidor de chamadas não está configurado." })).await?;
                             continue;
                         }
                         let (Some(url), Some(key)) = (cfg.realtime_url.clone(), cfg.realtime_key.clone()) else {
