@@ -1,5 +1,8 @@
 # Briks — transmissão de tela e chamadas
 
+> [!IMPORTANT]
+> **O Windows pode apontar o Briks como "falso positivo".** O Briks ainda não tem certificado de assinatura de código, então o SmartScreen ou o Microsoft Defender podem bloquear o instalador por engano. O programa é seguro e o código é aberto. [Veja o que fazer](#aviso-o-windows-pode-apontar-o-briks-como-falso-positivo). *(Windows may flag Briks as a false positive because it is not code-signed yet; see the notice below.)*
+
 **Briks** é um aplicativo desktop (Windows) para transmitir tela e conversar com amigos, pensado para conviver com o Discord: você fica na call do Discord e transmite pelo Briks sem que a voz do Discord vaze para o stream.
 
 > **O app principal agora é nativo (C99 + CUI), em `apps/desktop-cui`.** O Electron foi removido deste branch (o último commit com ele está no branch local `backup/electron-pre-cui`). A interface React de `apps/web` e os pacotes `packages/*` continuam no repositório porque o backend, o signaling e a interface web ainda os usam. Os trechos abaixo sobre Electron, instalador NSIS/AppImage e auto-update descrevem o app antigo. Plano e pendências: `docs/plans/migracao-cui-principal.md`.
