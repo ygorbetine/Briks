@@ -586,6 +586,22 @@ async fn next(rx: &mut tokio::sync::mpsc::Receiver<Value>) -> Value {
 }
 
 #[tokio::test]
+async fn short_group_invite_commands_are_claimed_by_the_accounts_service_and_always_answer() {
+    // regressão (1.5.31): "group.invite.short/resolve" não estavam na lista de comandos do serviço e nunca recebiam resposta ("Gerando…" para sempre)
+    let _g = FLOW.lock().await;
+    let f = fake::start(0).await.unwrap();
+    let dir = tmpdir("svcinv");
+    let rt = service::Runtime::for_tests(Some(Arc::new(accounts(&f, &dir))), dir.clone());
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let mut svc = service::Service::new(rt, tx);
+    assert!(svc.command("group.invite.short", &json!({ "package": "qualquer coisa" })));
+    let e = next(&mut rx).await;
+    assert_eq!((e["ev"].as_str(), e["ok"].as_bool(), e["error_code"].as_str()), (Some("group.invite.short"), Some(false), Some("invalid_package")));
+    assert!(svc.command("group.invite.resolve", &json!({ "code": "BRK-ZZZZ-ZZZZ", "tag": "t" })));
+    assert_eq!(next(&mut rx).await["ev"], "group.invite.resolve");
+}
+
+#[tokio::test]
 async fn service_emits_states_for_login_cancel_and_logout() {
     let _g = FLOW.lock().await;
     let f = fake::start(0).await.unwrap();

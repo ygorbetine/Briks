@@ -277,7 +277,7 @@ impl Service {
 
     /// Devolve true se o comando era deste módulo.
     pub fn command(&mut self, cmd: &str, v: &Value) -> bool {
-        if !(cmd.starts_with("account.") || cmd.starts_with("backup.") || cmd.starts_with("friends.") || cmd.starts_with("report.") || cmd.starts_with("import.") || cmd == "local.credentials") {
+        if !(cmd.starts_with("account.") || cmd.starts_with("backup.") || cmd.starts_with("friends.") || cmd.starts_with("report.") || cmd.starts_with("group.invite.") || cmd.starts_with("import.") || cmd == "local.credentials") {
             return false;
         }
         let (rt, tx) = (self.rt.clone(), self.tx.clone());

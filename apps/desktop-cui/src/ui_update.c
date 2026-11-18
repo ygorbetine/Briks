@@ -69,6 +69,9 @@ void update_dialog(cui_ctx *ui, app_state_t *s) {
 
 typedef struct { const char *version; const char *items[14]; } notes_t;
 static const notes_t NOTES[] = {
+    { "1.5.32", {
+        "Convites: o código curto (BRK-XXXX-XXXX) voltou a funcionar: antes o pedido nunca chegava ao servidor e o botão ficava em \"Gerando…\" até desistir. Entrar com o código curto também foi consertado.",
+        NULL } },
     { "1.5.31", {
         "Grupos: o botão de gerar código e o convite pelo botão direito ou pelo painel Membros agora tentam de novo sozinhos e, se não der, dizem o motivo em vez de não fazer nada.",
         "Grupos: ao convidar alguém com uma operação em andamento, o Briks avisa em vez de adicionar a pessoa na tela sem enviar o convite.",
