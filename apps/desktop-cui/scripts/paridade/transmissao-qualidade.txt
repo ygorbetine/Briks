@@ -2,9 +2,9 @@
 waitms 1000
 shot q-antes
 waitms 1800
-expect share_q0_res 1
+expect share_q0_res 2
 expect share_q0_fps 4
-expect share_q1_res 0
+expect share_q1_res 1
 expect share_q1_fps 1
 expect share_q0_kbps 0
 expect share_q1_kbps 3000

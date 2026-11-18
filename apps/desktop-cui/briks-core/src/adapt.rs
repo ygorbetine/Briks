@@ -214,7 +214,7 @@ pub struct Level { pub h: usize, pub fps: u32 }
 /// Bitrate abaixo do qual a resolução cai (1.5.22): só 35% do "automático" (abaixo disso o vídeo vira blocos borrados e "fantasmas", pior que perder resolução) daquela resolução/FPS. Acima disso o Briks mantém resolução e FPS e só reduz o bitrate.
 pub fn need_bps(l: Level) -> f64 { auto_bitrate(l.h, l.fps) as f64 * 0.35 }
 
-const HEIGHTS: [usize; 7] = [2160, 1440, 1080, 900, 720, 540, 360];
+const HEIGHTS: [usize; 8] = [2160, 1440, 1080, 900, 720, 540, 480, 360];
 
 /// Escada do melhor para o pior, conforme a política do conteúdo. `max_h`/`max_fps` = o que o usuário pediu (teto).
 pub fn ladder(content: Content, max_h: usize, max_fps: u32) -> Vec<Level> {
@@ -412,6 +412,18 @@ mod tests {
         }
         let mut d = c.decide(auto_bitrate(1080, 60) as f64 * 0.05); for _ in 0..3 { d = c.decide(auto_bitrate(1080, 60) as f64 * 0.05); }
         assert!(d.level.h < 1080 && d.level.fps == 60, "só com o orçamento muito pequeno a resolução cai: {d:?}");
+    }
+
+    /// 1.5.28: 480p é uma resolução que se pode escolher; a escada desce dali só até 360p e o 480 aparece como degrau a partir do 720p.
+    #[test]
+    fn four_eighty_p_is_a_valid_ceiling_and_a_step_below_720p() {
+        let hs = |max_h: usize| ladder(Content::Detail, max_h, 30).iter().map(|l| l.h).collect::<Vec<_>>();
+        assert_eq!(hs(480), vec![480, 360]);
+        assert_eq!(hs(720), vec![720, 540, 480, 360]);
+        assert!(ladder(Content::Detail, 480, 30).iter().all(|l| l.fps == 30), "o FPS escolhido não muda");
+        let mut c = Controller::new(Content::Detail, 480, 30, 0);
+        let d = c.decide(auto_bitrate(480, 30) as f64 * 2.0);
+        assert_eq!(d.level, Level { h: 480, fps: 30 });
     }
 
     #[test]

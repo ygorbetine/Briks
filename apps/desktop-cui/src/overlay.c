@@ -1092,17 +1092,96 @@ static int shot_main(const wchar_t *path) {
     CloseHandle(fh); free(row); free(rgb); return 0;
 }
 
+/* Filme da sobreposição (só para demonstração; nada disso roda no uso normal):
+ *   briks_overlay.exe --film <pasta> <quadros>
+ * Lê <pasta>\t0.raw e <pasta>\t1.raw (quadros BGRA 320x180 em sequência, em laço) como as duas transmissões ao vivo e escreve em stdout
+ * <quadros> imagens BGRA 1920x1080 (alfa reto, fundo transparente) com o painel, as miniaturas e a barra de edição; um programa de vídeo
+ * compõe isso sobre o "jogo". Linha do tempo a 24 quadros/s: miniatura 2 aparece, aviso de mudo, modo de edição e arraste da miniatura. */
+static int film_main(const wchar_t *dirw, int nframes) {
+    g_noshow = 1; g_capture_out = 1; g_inject = 1; g_snap_on = 1;
+    char dir[400]; WideCharToMultiByte(CP_UTF8, 0, dirw, -1, dir, sizeof dir, NULL, NULL);
+    unsigned char *src[2] = { NULL, NULL }; size_t nsrc[2] = { 0, 0 }; const size_t FSZ = 320 * 180 * 4;
+    for (int k = 0; k < 2; k++) {
+        char fp[460]; snprintf(fp, sizeof fp, "%s\\t%d.raw", dir, k);
+        FILE *f = fopen(fp, "rb"); if (!f) return 2;
+        fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
+        src[k] = (unsigned char *)malloc((size_t)sz); if (!src[k] || fread(src[k], 1, (size_t)sz, f) != (size_t)sz) { fclose(f); return 2; }
+        fclose(f); nsrc[k] = (size_t)sz / FSZ; if (!nsrc[k]) return 2;
+    }
+    char mn[64]; snprintf(mn, sizeof mn, "Local\\BriksOvlFilm-%lu", (unsigned long)GetCurrentProcessId());
+    HANDLE mh = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, NT * LV_SLOT, mn);
+    unsigned char *mm = mh ? (unsigned char *)MapViewOfFile(mh, FILE_MAP_WRITE, 0, 0, 0) : NULL; if (!mm) return 1;
+    MONITORINFOEXW mi; mi.cbSize = sizeof mi; GetMonitorInfoW(MonitorFromPoint((POINT){ 0, 0 }, MONITOR_DEFAULTTOPRIMARY), (MONITORINFO *)&mi);
+    char dev[40]; WideCharToMultiByte(CP_UTF8, 0, mi.szDevice, -1, dev, sizeof dev, NULL, NULL);
+    frame_t b, o; memset(&b, 0, sizeof b); memset(&o, 0, sizeof o); char ln[200];
+    snprintf(ln, sizeof ln, "livemap %s", mn); apply_line(&b, &o, ln);
+    const int CW = 1920, CH = 1080; const RECT wa = mi.rcWork;
+    unsigned *cv = (unsigned *)malloc((size_t)CW * CH * 4); if (!cv) return 1;
+    HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
+    static const char *const NAMES[3] = { "Marina Costa", "Rafael Lima", "Você" };
+    for (int i = 0; i < nframes; i++) {
+        const double sec = i / 24.0;
+        for (int k = 0; k < 2; k++) {   /* próximo quadro de cada transmissão (a 2ª começa adiantada, como outra tela) */
+            const size_t fi = ((size_t)i + (k ? 1400u : 0u)) % nsrc[k];
+            unsigned char *m = mm + (size_t)k * LV_SLOT; volatile unsigned *seq = (volatile unsigned *)(m + 4); *seq += 1;
+            int w = 320, h = 180; unsigned long long n = (unsigned long long)i + 2;
+            memcpy(m, "BOVL", 4); memcpy(m + 8, &w, 4); memcpy(m + 12, &h, 4); memcpy(m + 16, &n, 8); memcpy(m + 64, src[k] + fi * FSZ, FSZ); *seq += 1;
+        }
+        const int edit = sec >= 8.0 && sec < 17.0, tile1_on = sec >= 3.0, mutew = sec >= 5.5 && sec < 8.0;
+        const int talk = ((int)(sec * 1.4)) % 3;   /* quem está falando agora */
+        snprintf(ln, sizeof ln, "cfg 90 0"); apply_line(&b, &o, ln);
+        snprintf(ln, sizeof ln, "edit %d", edit ? 1 : 0); apply_line(&b, &o, ln);
+        apply_line(&b, &o, "flags 15"); apply_line(&b, &o, "lives 2");
+        apply_line(&b, &o, "begin"); apply_line(&b, &o, "i Sala conectada");
+        for (int p = 0; p < 3; p++) { snprintf(ln, sizeof ln, "p %d %s", p == talk ? 1 : 0, NAMES[p]); apply_line(&b, &o, ln); }
+        if (mutew) apply_line(&b, &o, "w Microfone mudo");
+        snprintf(ln, sizeof ln, "tile 0 k1 1 Marina Costa"); apply_line(&b, &o, ln);
+        snprintf(ln, sizeof ln, "tile 1 k2 %d Marina Costa · Tela 2", tile1_on ? 1 : 0); apply_line(&b, &o, ln);
+        snprintf(ln, sizeof ln, "place %s 1596 24 300", dev); apply_line(&b, &o, ln);
+        double x0 = 1230, y0 = 24, pct0 = 100;   /* arraste da miniatura 1 no modo de edição: do alto, ao lado do painel, para o canto de baixo à esquerda */
+        if (sec >= 9.5) { double u = fmin(1.0, (sec - 9.5) / 3.5); u = u * u * (3 - 2 * u); x0 = 1230 + (70 - 1230) * u; y0 = 24 + (700 - 24) * u; }
+        if (sec >= 13.5) { double u = fmin(1.0, (sec - 13.5) / 2.0); u = u * u * (3 - 2 * u); pct0 = 100 + 60 * u; }
+        snprintf(ln, sizeof ln, "tplace 0 %s %d %d %d", dev, (int)x0, (int)y0, (int)pct0); apply_line(&b, &o, ln);
+        snprintf(ln, sizeof ln, "tplace 1 %s 1230 230 100", dev); apply_line(&b, &o, ln);
+        apply_line(&b, &o, "end");
+        cur = o; paint(&cur); for (int k = 0; k < NT; k++) lv_poll(k); for (int k = 0; k < NT; k++) paint_tile(k, &cur);
+        if (!tile1_on) { free(g_snap[3].px); memset(&g_snap[3], 0, sizeof g_snap[3]); }
+        for (int k = 2; k < NT; k++) { free(g_snap[2 + k].px); memset(&g_snap[2 + k], 0, sizeof g_snap[2 + k]); }
+        if (!edit) { free(g_snap[1].px); memset(&g_snap[1], 0, sizeof g_snap[1]); }
+        memset(cv, 0, (size_t)CW * CH * 4);
+        for (int k = 0; k < 2 + NT; k++) {   /* compõe os "vidros" pré-multiplicados em cima do fundo transparente */
+            if (!g_snap[k].px) continue;
+            for (int y = 0; y < g_snap[k].h; y++) for (int x = 0; x < g_snap[k].w; x++) {
+                int X = (k == 1 ? (CW - g_snap[k].w) / 2 : g_snap[k].x - wa.left) + x, Y = (k == 1 ? CH - g_snap[k].h - 16 : g_snap[k].y - wa.top) + y; if (X < 0 || Y < 0 || X >= CW || Y >= CH) continue;   /* a barra de edição fica no meio, embaixo da tela de 1080p */
+                unsigned s = g_snap[k].px[y * g_snap[k].w + x], a = s >> 24, d = cv[(size_t)Y * CW + X]; if (!a) continue;
+                unsigned r = ((s >> 16) & 255) + ((d >> 16) & 255) * (255 - a) / 255, g = ((s >> 8) & 255) + ((d >> 8) & 255) * (255 - a) / 255,
+                         bl = (s & 255) + (d & 255) * (255 - a) / 255, aa = a + (d >> 24) * (255 - a) / 255;
+                cv[(size_t)Y * CW + X] = (aa << 24) | ((r > 255 ? 255 : r) << 16) | ((g > 255 ? 255 : g) << 8) | (bl > 255 ? 255 : bl);
+            }
+        }
+        for (size_t q = 0; q < (size_t)CW * CH; q++) {   /* alfa pré-multiplicado -> alfa reto (o ffmpeg compõe com alfa reto) */
+            unsigned c = cv[q], a = c >> 24; if (!a || a == 255) continue;
+            unsigned r = ((c >> 16) & 255) * 255 / a, g = ((c >> 8) & 255) * 255 / a, bl = (c & 255) * 255 / a;
+            cv[q] = (a << 24) | ((r > 255 ? 255 : r) << 16) | ((g > 255 ? 255 : g) << 8) | (bl > 255 ? 255 : bl);
+        }
+        const unsigned char *pb = (const unsigned char *)cv; size_t left = (size_t)CW * CH * 4;
+        while (left) { DWORD w2 = 0; if (!WriteFile(out, pb, (DWORD)(left > (1u << 20) ? (1u << 20) : left), &w2, NULL) || !w2) return 3; pb += w2; left -= w2; }
+    }
+    free(cv); return 0;
+}
+
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
     (void)prev; (void)cmd; (void)show;
     InitializeCriticalSection(&cs);
     int argc; LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    int selftest = 0, use_stdin = 0, protocol = 0, edittest = 0; const wchar_t *shot = NULL;
+    int selftest = 0, use_stdin = 0, protocol = 0, edittest = 0; const wchar_t *shot = NULL, *film = NULL; int film_n = 0;
     for (int i = 1; i < argc; i++) {
         if (!wcscmp(argv[i], L"--selftest")) { selftest = 1; continue; }
         if (!wcscmp(argv[i], L"--protocol-test")) { protocol = 1; continue; }
         if (!wcscmp(argv[i], L"--stdin")) { use_stdin = 1; continue; }
         if (!wcscmp(argv[i], L"--edit-test")) { edittest = 1; continue; }
         if (!wcscmp(argv[i], L"--shot") && i + 1 < argc) { shot = argv[++i]; continue; }
+        if (!wcscmp(argv[i], L"--film") && i + 2 < argc) { film = argv[++i]; film_n = _wtoi(argv[++i]); continue; }
         if (cur.n >= MAXR) break;
         wchar_t *c = wcsrchr(argv[i], L':'); int sp = 0;
         if (c && !wcscmp(c, L":f")) { *c = 0; sp = 1; }
@@ -1123,6 +1202,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
     { WNDCLASSW tc = { 0 }; tc.lpfnWndProc = tproc; tc.hInstance = inst; tc.lpszClassName = L"BriksOverlayTile"; tc.hCursor = LoadCursor(NULL, IDC_ARROW); RegisterClassW(&tc);
       for (int k = 0; k < NT; k++) { T[k].wnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, tc.lpszClassName, L"Briks overlay - transmissao", WS_POPUP, 0, 0, 10, 10, NULL, NULL, inst, NULL); if (T[k].wnd) SetWindowLongPtrW(T[k].wnd, GWLP_USERDATA, k + 1); } }
     if (!hbar) return 1;
+    if (film) { int r = film_main(film, film_n); DestroyWindow(hbar); DestroyWindow(hwnd); return r; }
     if (shot) { int r = shot_main(shot); DestroyWindow(hbar); DestroyWindow(hwnd); return r; }
     if (edittest) { int fl = edit_selftest(); say(fl ? "\n%d falha(s)\n" : "\ntudo certo\n", fl); DestroyWindow(hwnd); return fl ? 1 : 0; }
     HWND fg_before = GetForegroundWindow();

@@ -42,8 +42,11 @@ static int g_qk[2];   /* teste qual-slots: kbps pedido a cada transmissão */
 static bool g_dev_open_quality;   /* gancho de captura: abre o popover de qualidade/telemetria */
 
 /* ---------- qualidade ---------- */
-static const int RES_H[4] = { 720, 1080, 1440, 2160 };
-static const char *const RES_LABEL[4] = { "720p", "1080p", "1440p", "4K" };
+#define RES_N 5
+#define RES_720 1
+#define RES_1080 2   /* 1.5.28: 480p entrou na frente da lista; os índices abaixo andaram um */
+static const int RES_H[RES_N] = { 480, 720, 1080, 1440, 2160 };
+static const char *const RES_LABEL[RES_N] = { "480p", "720p", "1080p", "1440p", "4K" };
 #define FPS_N 7
 static const int FPS_V[FPS_N] = { 10, 15, 20, 24, 30, 45, 60 };
 static const char *const FPS_LABEL[FPS_N] = { "10", "15", "20", "24", "30", "45", "60" };
@@ -610,8 +613,9 @@ void share_tick(cui_ctx *ui, app_state_t *s) {
     }
     for (int i = 0; i < g_ntrash; i++) cui_image_destroy(ui, g_trash[i]);
     g_ntrash = 0;
-    if (!q->fps && !q->res && !q->br_custom) { q->res = 1; q->fps = FPS_DEFAULT; q->br_custom = 8; }
-    if (q->fps < 0 || q->fps >= FPS_N) q->fps = FPS_DEFAULT;   /* padrão: 1080p · 30 FPS · automático */
+    if (!q->fps && !q->res && !q->br_custom) { q->res = RES_1080; q->fps = FPS_DEFAULT; q->br_custom = 8; }
+    if (q->fps < 0 || q->fps >= FPS_N) q->fps = FPS_DEFAULT;
+    if (q->res < 0 || q->res >= RES_N) q->res = RES_1080;   /* padrão: 1080p · 30 FPS · automático */
     /* só assiste no modo Transmissão (aba Chamada): fora dele o core nem decodifica */
     bool viewing = share_viewing(s);
     {   /* enquanto assiste a uma transmissão o computador não suspende nem apaga a tela; ao parar de assistir, volta ao normal */
@@ -711,6 +715,25 @@ void share_tick(cui_ctx *ui, app_state_t *s) {
         }
       }
     }
+    /* vídeo de demonstração (BRIKS_DEMO_VIDEO=<pasta com v0..v3.raw, RGBA 960x540, N quadros>): um quadro novo por quadro do app nos blocos de demonstração */
+    { static const char *vd = (const char *)1; if (vd == (const char *)1) vd = getenv("BRIKS_DEMO_VIDEO");
+      static int tick; static FILE *src[4]; static int nfr[4];
+      if (vd && vd[0] && q->remote[0].path[0]) {
+        char *dst[4] = { q->remote[0].path, q->remote2[0].path, q->remote[1].path, q->remote[2].path };
+        const size_t fsz = (size_t)960 * 540 * 4;
+        for (int k = 0; k < 4; k++) {
+            if (!src[k]) { char fp[400]; snprintf(fp, sizeof fp, "%s\\v%d.raw", vd, k); src[k] = fopen(fp, "rb"); if (src[k]) { _fseeki64(src[k], 0, SEEK_END); nfr[k] = (int)(_ftelli64(src[k]) / (long long)fsz); } }
+            if (!src[k] || nfr[k] <= 0 || !dst[k][0]) continue;
+            static unsigned char *buf; if (!buf) buf = (unsigned char *)malloc(fsz);
+            _fseeki64(src[k], (long long)(tick % nfr[k]) * (long long)fsz, SEEK_SET);
+            if (!buf || fread(buf, 1, fsz, src[k]) != fsz) continue;
+            FILE *f = fopen(dst[k], "r+b"); if (!f) continue;
+            unsigned char hd[64] = { 'B', 'K', 'F', 'R' }; int W = 960, H = 540; unsigned long long n = (unsigned long long)tick + 2;
+            memcpy(hd + 8, &W, 4); memcpy(hd + 12, &H, 4); memcpy(hd + 16, &n, 8);
+            fwrite(hd, 1, 64, f); fwrite(buf, 1, fsz, f); fclose(f);
+        }
+        tick++; cui_request_redraw(ui);
+      } }
     /* ganchos de teste/captura: BRIKS_DEV_SHARE=dialog | dialog-apps | dialog-windows | screen | test (uma vez, com o core pronto) */
     static int dev; const char *d = getenv("BRIKS_DEV_SHARE");
     if (d) cui_request_redraw(ui);
@@ -718,9 +741,9 @@ void share_tick(cui_ctx *ui, app_state_t *s) {
     if (d && !strcmp(d, "qual-slots")) {   /* teste (CHM-34): duas transmissões, cada uma com a sua qualidade; trocar/mudar a 2 não mexe na 1 */
         static int step; double t = cui_time(ui);
         if (step == 0 && t > 0.5) {
-            step = 1; q->res = 1; q->fps = FPS_DEFAULT; q->br_mode = 0;                 /* 1ª: 1080p 30 automático */
+            step = 1; q->res = RES_1080; q->fps = FPS_DEFAULT; q->br_mode = 0;                 /* 1ª: 1080p 30 automático */
             q->active = true; q->second.active = true; copy(q->label, sizeof q->label, "Monitor 1"); copy(q->second.label, sizeof q->second.label, "Janela do jogo");
-            qual_switch(q, 1); q->res = 0; q->fps = 1; q->br_mode = 3; q->br_custom = 3;   /* 2ª: 720p 15 personalizado 3 Mbps */
+            qual_switch(q, 1); q->res = RES_720; q->fps = 1; q->br_mode = 3; q->br_custom = 3;   /* 2ª: 720p 15 personalizado 3 Mbps */
             qual_switch(q, 0);
             { qual_t p = qual_enter(q, 1); g_qk[1] = chosen_kbps(q); qual_leave(q, p); }
             { qual_t p = qual_enter(q, 0); g_qk[0] = chosen_kbps(q); qual_leave(q, p); }
@@ -750,7 +773,7 @@ void share_tick(cui_ctx *ui, app_state_t *s) {
     if (d && !strcmp(d, "demo-quality")) { static int once; if (!once && cui_time(ui) > 1.0) { once = 1; g_dev_open_quality = true; } }   /* captura sem core: abre a janela de qualidade */
     if (d && core_state() == CORE_READY && s->in_room) {
         if (!strcmp(d, "adapt") && q->active) { static double t0; if (t0 == 0) t0 = cui_time(ui); if (cui_time(ui) - t0 > 3 && dev < 3) { dev = 3; g_dev_open_quality = true; } }
-        if (dev == 0 && !strcmp(d, "dialog-quality")) { q->quality_open = true; q->br_mode = 3; q->br_custom = 35; q->res = 2; q->fps = FPS_N - 1; }
+        if (dev == 0 && !strcmp(d, "dialog-quality")) { q->quality_open = true; q->br_mode = 3; q->br_custom = 35; q->res = 3; q->fps = FPS_N - 1; }
         if (dev == 0) { dev = 1; if (!strncmp(d, "dialog", 6) || !strcmp(d, "screen") || !strcmp(d, "adapt")) share_open_dialog(s);
             if (!strcmp(d, "dialog-apps")) q->audio_mode = 1; if (!strcmp(d, "dialog-windows")) q->tab = 1;
             if (!strcmp(d, "test")) { if (s->rtc_session_ready && !strcmp(s->rtc_state, "conectado") && cui_time(ui) > 4.0) send_start(s, "test", "0", "Padrão de teste"); else dev = 0; } }
@@ -846,7 +869,7 @@ static bool quality_controls(cui_ctx *ui, share_state_t *q) {
         }
         cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .gap = 6, .wrap = true, .justify = CUI_JUSTIFY_BETWEEN, .align = CUI_ALIGN_CENTER) {
             cui_text(ui, "Resolução", .size = 13, .color = B_MUTED);
-            ch |= seg(ui, "res", RES_LABEL, NULL, 4, &q->res);
+            ch |= seg(ui, "res", RES_LABEL, NULL, RES_N, &q->res);
         }
         cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .gap = 6, .wrap = true, .justify = CUI_JUSTIFY_BETWEEN, .align = CUI_ALIGN_CENTER) {
             cui_text(ui, "Quadros por segundo", .size = 13, .color = B_MUTED);
