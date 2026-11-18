@@ -1,5 +1,8 @@
 # Briks — transmissão de tela e chamadas
 
+> [!IMPORTANT]
+> **O Windows pode apontar o Briks como "falso positivo".** O Briks ainda não tem certificado de assinatura de código, então o SmartScreen ou o Microsoft Defender podem bloquear o instalador por engano. O programa é seguro e o código é aberto. [Veja o que fazer](#aviso-o-windows-pode-apontar-o-briks-como-falso-positivo). *(Windows may flag Briks as a false positive because it is not code-signed yet; see the notice below.)*
+
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X2V22ACYIW)
 
 **Briks** é um aplicativo desktop (Windows) para transmitir tela e conversar com amigos, pensado para conviver com o Discord: você fica na call do Discord e transmite pelo Briks sem que a voz do Discord vaze para o stream.
