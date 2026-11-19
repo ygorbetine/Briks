@@ -126,6 +126,11 @@
       { "item": "RDE-01", "de": "rm1", "para": "rm2", "esperado": "muda" } ] },
     { "id": "grupos-voz", "demo": "group", "roteiro": "grupos-voz.txt", "env": { "BRIKS_DEMO_GROSTER": "1" }, "checagens": [
       { "item": "GRP-17", "de": "gv0", "para": "gv1", "esperado": "muda" } ] },
+    { "id": "grupos-assistir-entra", "demo": "group", "roteiro": "grupos-assistir-entra.txt", "env": { "BRIKS_DEMO_GROSTER": "1", "BRIKS_DEMO_WATCH": "1" }, "checagens": [
+      { "item": "GRP-17", "de": "wa0", "para": "wa1", "esperado": "muda" } ] },
+    { "id": "share-aviso-assistir", "demo": "call", "roteiro": "share-aviso-assistir.txt", "env": { "BRIKS_DEMO_PEERS": "3", "BRIKS_DEV_SHARE": "demo-sheen" }, "checagens": [
+      { "item": "TRX-10", "de": "aviso-1-apareceu", "para": "aviso-2-assistindo", "esperado": "muda" } ] },
+    { "id": "share-prazo-iniciando", "demo": "call", "roteiro": "share-prazo-iniciando.txt", "env": { "BRIKS_DEMO_PEERS": "2", "BRIKS_DEV_STARTING": "1", "BRIKS_START_TIMEOUT_MS": "1500" }, "checagens": [] },
     { "id": "grupos-busca", "demo": "group", "roteiro": "grupos-busca.txt", "checagens": [
       { "item": ["GRP-19", "MSG-15"], "de": "gb0", "para": "gb1", "esperado": "muda" } ] },
     { "id": "msg-anexar", "demo": "msgs", "roteiro": "msg-anexar.txt", "checagens": [
