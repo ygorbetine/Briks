@@ -13,7 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-sys_cfg_t g_sys = { .close_to_tray = true, .nt_msg = true, .sounds = true, .sound_vol = 70, .mic_on = true, .nudge_on = true, .nudge_sound = true };
+sys_cfg_t g_sys = { .intro_on = true, .close_to_tray = true, .nt_msg = true, .sounds = true, .sound_vol = 70, .mic_on = true, .nudge_on = true, .nudge_sound = true };
 
 #define WM_TRAY (WM_APP + 0x41)
 #define SYS_TIMER 7701
@@ -35,7 +35,7 @@ static bool cfg_path(char *out, size_t cap) {
     snprintf(out, cap, "%s\\sistema.cfg", dir); return true;
 }
 static const struct { const char *k; char t; void *p; } CF[] = {
-    { "close_to_tray", 'b', &g_sys.close_to_tray }, { "autostart", 'b', &g_sys.autostart }, { "nt_msg", 'b', &g_sys.nt_msg }, { "sounds", 'b', &g_sys.sounds },
+    { "intro_on", 'b', &g_sys.intro_on }, { "close_to_tray", 'b', &g_sys.close_to_tray }, { "autostart", 'b', &g_sys.autostart }, { "nt_msg", 'b', &g_sys.nt_msg }, { "sounds", 'b', &g_sys.sounds },
     { "sound_vol", 'i', &g_sys.sound_vol }, { "mic_on", 'b', &g_sys.mic_on }, { "deaf", 'b', &g_sys.deaf }, { "tray_hint", 'b', &g_sys.tray_hint_shown }, { "win_x", 'i', &g_sys.win_x }, { "win_y", 'i', &g_sys.win_y },
     { "win_w", 'i', &g_sys.win_w }, { "win_h", 'i', &g_sys.win_h }, { "win_max", 'b', &g_sys.win_max }, { "win_valid", 'b', &g_sys.win_valid },
     { "nudge_on", 'b', &g_sys.nudge_on }, { "nudge_mode", 'i', &g_sys.nudge_mode }, { "nudge_sound", 'b', &g_sys.nudge_sound }, { "dnd_until", 'l', &g_sys.dnd_until }, { "dnd_calls", 'b', &g_sys.dnd_calls },
@@ -65,6 +65,7 @@ bool sys_in_tray(void) { return g_in_tray && !g_headless; }   /* janela escondid
 void *sys_hwnd(void) { return g_hwnd; }
 app_state_t *sys_state(void) { return g_s; }
 bool sys_start_minimized(void) { return g_start_min; }
+bool sys_intro_on(void) { return g_sys.intro_on; }
 bool sys_window_focused(void) {
     int f = notify_force_focus(); if (f >= 0) return f != 0;
     return g_hwnd && IsWindowVisible(g_hwnd) && !IsIconic(g_hwnd) && GetForegroundWindow() == g_hwnd;
@@ -423,5 +424,7 @@ void sys_settings_system(cui_ctx *ui) {
             if (!sys_autostart_set(a)) settings_notice("Não foi possível alterar o início com o Windows.");
         }
         hint(ui, "Abre o Briks só na bandeja quando você entra no Windows.");
+        if (cui_switch(ui, "Abertura animada ao abrir", &g_sys.intro_on)) sys_cfg_save();
+        hint(ui, "Toca uma vinheta curta quando o Briks abre. Clique ou Esc para pular.");
     }
 }

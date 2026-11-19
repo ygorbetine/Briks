@@ -11,6 +11,7 @@
 #include "sysint.h"
 #include "sons.h"
 #include "annot.h"
+#include "intro.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -142,6 +143,7 @@ static void frame(cui_ctx *ui) {
     hotkeys_tick(ui, &state);
     themes_tick(ui);
     { const char *o = getenv("BRIKS_DEV_OPEN"); if (o && state.screen == SCREEN_SOCIAL) { if (!strncmp(o, "settings", 8)) { state.settings_open = true; if (o[8] == ':') state.settings_tab = atoi(o + 9); } if (!strcmp(o, "add")) state.add_friend_open = true; if (!strncmp(o, "profile", 7)) { state.profile_open = true; if (o[7] == ':') state.profile_tab = atoi(o + 8); } } }
+    cui_box(ui, .dir = CUI_STACK, .width = CUI_FILL, .height = CUI_FILL) {   /* pilha: a abertura (intro.c) cobre a janela toda, barra de título incluída */
     cui_box(ui, .width = CUI_FILL, .height = CUI_FILL, .gap = 0) {
         titlebar_draw(ui, &state);   /* barra de título própria (titlebar.c) */
         briks_gradient_bar(ui);
@@ -162,6 +164,8 @@ static void frame(cui_ctx *ui) {
             update_banner(ui, &state);   /* dentro da pilha: sobrepõe a tela sem ocupar espaço do layout */
             if (getenv("BRIKS_SCRIPT")) script_overlay(ui);
         }
+    }
+    intro_draw(ui, sys_intro_on(), sys_start_minimized());   /* abertura animada: só na abertura a frio */
     }
     migrate_dialog(ui, &state);
     update_dialog(ui, &state);

@@ -7,6 +7,7 @@
 
 /* ---- configuração do sistema (sistema.cfg; BRIKS_SYS_FILE em testes) ---- */
 typedef struct {
+    bool intro_on;         /* abertura animada ao abrir o app (intro.c); ligada por padrão */
     bool close_to_tray;    /* fechar a janela deixa o Briks na bandeja (a chamada continua) */
     bool autostart;        /* iniciar com o Windows (chave Run do usuário) */
     bool nt_msg;           /* aviso de nova mensagem */
@@ -25,6 +26,7 @@ extern sys_cfg_t g_sys;
 
 /* ---- winstate.c ---- */
 bool sys_startup(const char *cmdline, bool automation);   /* antes de criar a janela: --aguardar=PID (reinício) e instância única; false = já havia outra (foi trazida à frente): sair */
+bool sys_intro_on(void);                                   /* Configurações > Sobre > Sistema: abertura animada ligada */
 bool sys_start_minimized(void);                          /* aberto pelo Windows (--minimizado): começa só na bandeja */
 void sys_attach(app_state_t *s, bool automation);        /* depois de criar a janela (oculta): restaura posição, liga bandeja e mostra */
 void sys_tick(app_state_t *s);                           /* a cada quadro */

@@ -12,7 +12,7 @@ FetchContent_Declare(cui
   PATCH_COMMAND  ${CMAKE_COMMAND} -P "${CMAKE_CURRENT_SOURCE_DIR}/patches/apply.cmake")
 FetchContent_MakeAvailable(cui)
 
-add_executable(briks_cui WIN32 src/main.c src/theme.c src/theme_cfg.c src/perf.c src/ui_auth.c src/ui_social.c src/ui_call.c src/app.c src/chat.c src/ginvite.c src/dmcall.c src/ui_history.c src/layout.c src/drag_stack.c src/drag_stack_ui.c src/dock.c src/script.c src/glass.c src/json.c src/backend.c src/core.c src/rtc.c src/profile.c src/msgui.c src/migrate.c src/update.c src/ui_update.c src/settings.c src/themes.c src/account.c src/ui_account.c src/ui_share.c src/ui_cam.c src/ui_voice.c src/hotkeys.c src/hotkeys_rt.c src/netdiag.c src/attach.c src/richtext.c src/ui_friends.c src/ui_groups.c src/winstate.c src/tray.c src/notify.c src/hotkeys_win.c src/storage.c src/settings_data.c src/overlay_host.c src/callhist.c src/firewall.c src/media_preview.c src/volume_ctl.c src/brick.c src/safety.c src/safety_ui.c src/nudge.c src/toastwin.c)
+add_executable(briks_cui WIN32 src/main.c src/theme.c src/theme_cfg.c src/perf.c src/ui_auth.c src/ui_social.c src/ui_call.c src/app.c src/chat.c src/ginvite.c src/dmcall.c src/ui_history.c src/layout.c src/drag_stack.c src/drag_stack_ui.c src/dock.c src/script.c src/glass.c src/json.c src/backend.c src/core.c src/rtc.c src/profile.c src/msgui.c src/migrate.c src/update.c src/ui_update.c src/settings.c src/themes.c src/account.c src/ui_account.c src/ui_share.c src/ui_cam.c src/ui_voice.c src/hotkeys.c src/hotkeys_rt.c src/netdiag.c src/attach.c src/richtext.c src/ui_friends.c src/ui_groups.c src/winstate.c src/tray.c src/notify.c src/hotkeys_win.c src/storage.c src/settings_data.c src/overlay_host.c src/callhist.c src/firewall.c src/media_preview.c src/volume_ctl.c src/brick.c src/safety.c src/safety_ui.c src/nudge.c src/toastwin.c src/intro.c)
 target_sources(briks_cui PRIVATE src/annot.c src/board.c)   # anotações nas transmissões e Board da sala
 target_sources(briks_cui PRIVATE src/net_state.c src/accountx.c src/titlebar.c src/hotkeys_ovl.c src/ui_nettest.c src/sons.c src/sons_util.c)   # estado da internet e faixa offline
 if(WIN32)
@@ -22,10 +22,19 @@ if(MSVC)
 endif()
 target_link_libraries(briks_cui PRIVATE cui mfplat mfreadwrite mfuuid propsys comdlg32 winmm winhttp bcrypt crypt32 shell32 opengl32 ws2_32 iphlpapi ole32 uuid advapi32 user32 gdi32)
 
+# Abertura animada (WebM VP9 com alfa): usa a libvpx que o briks-core já compila (scripts/build-vpx.ps1). Sem ela (-NoVpx) o app compila sem a abertura.
+set(BRIKS_VPX_LIB "${CMAKE_CURRENT_SOURCE_DIR}/briks-core/vendor/vpx/libvpx.lib")
+if(EXISTS "${BRIKS_VPX_LIB}")
+  target_compile_definitions(briks_cui PRIVATE BRIKS_INTRO_VPX=1)
+  target_include_directories(briks_cui PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+  target_link_libraries(briks_cui PRIVATE "${BRIKS_VPX_LIB}")
+endif()
+
 # Logos do login (Google e Discord) ao lado do executável.
 add_custom_command(TARGET briks_cui POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets/login" $<TARGET_FILE_DIR:briks_cui>/assets/login
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets/logo" $<TARGET_FILE_DIR:briks_cui>/assets/logo
+  COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets/intro" $<TARGET_FILE_DIR:briks_cui>/assets/intro
   COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/assets/licenses.txt" $<TARGET_FILE_DIR:briks_cui>/assets/licenses.txt)
 
 # Copia o backend local (briks-desktop-backend.exe) para ao lado do executável.
