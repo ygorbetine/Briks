@@ -1,0 +1,4 @@
+# QoL-1: quando alguém da sala fala, a contagem de inatividade não corre (o prazo curto de teste passaria sem isso). Peers de demo falam sempre
+waitms 9000
+expect call_in_room 1
+snap f0
