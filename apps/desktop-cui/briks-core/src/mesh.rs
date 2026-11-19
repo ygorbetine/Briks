@@ -135,6 +135,8 @@ pub enum MeshCmd {
     /// Painel de sons: dispara um som que tenho (assinado, para toda a sala) / pré-busca o arquivo de um som do catálogo.
     SoundPlay { hash: String },
     SoundFetch { hash: String },
+    /// Anotações/Board: comando da UI (`kind` = ops | laser | perm | drop | drop_owner | sync), ver `annot.rs`.
+    Annot { body: Value },
     /// Pede a um peer (peer_id ou impressão digital) que transmita a tela.
     StreamRequest { key: String },
     /// Responde a quem pediu a minha transmissão.
@@ -275,6 +277,7 @@ struct Actor {
     hist_reqs: HashMap<String, String>,        // peer -> requestId do pedido de histórico em andamento
     seen_msgs: HashSet<String>,
     sons: crate::sonsnet::Net,
+    annot: crate::annot::Net,
     incoming: HashMap<String, (String, crate::filetransfer::Incoming, u64)>,   // id -> (peer, estado, último progresso emitido)
     outgoing: HashMap<String, Arc<Ctl>>,                                   // id -> controle (aceitar, pausar, cancelar)
     pending: HashMap<String, (String, crate::filetransfer::Offer)>,       // ofertas recebidas aguardando "Baixar": id -> (peer, oferta)
@@ -321,9 +324,10 @@ impl Actor {
         let (itx, irx) = mpsc::channel(512);
         let validator = Validator::new(&room_hash, &cfg.local_peer);
         let sons = crate::sonsnet::Net::new(&identity.fingerprint(), &room_hash, crate::sons::store_for(&identity.fingerprint()));
+        let annot = crate::annot::Net::new(&identity.fingerprint());
         let (sev_tx, sev_rx) = mpsc::channel::<Value>(256);
         let (cam_tx, cam_rx) = mpsc::channel::<Value>(256);
-        Actor { fec_dcs: Arc::new(std::sync::Mutex::new(vec![])), vcodecs: crate::codec::local_caps(), cfg, identity, rt, ev, room_hash, validator, present: HashSet::new(), viewers: [HashSet::new(), HashSet::new()], peers: HashMap::new(), itx, irx: Some(irx), next_gen: 1, outbox: HashMap::new(), sent_notified: HashSet::new(), dm_off: HashSet::new(), watch_intent: HashMap::new(), remote_live: HashSet::new(), cam_live: HashSet::new(), seen_msgs: HashSet::new(), sons, incoming: HashMap::new(), outgoing: HashMap::new(), pending: HashMap::new(), recv_dir: recv_dir(), ev_last_ts: 0, seen_events: HashSet::new(), audio, audio_rx, joined: HashMap::new(), banned: HashSet::new(), profile: (String::new(), String::new()), media: None, sfu_id: String::new(), dead: false, blocked: HashSet::new(), share: [None, None], share_gens: [0, 0], share_gen: 0, net: Default::default(), idr: [Arc::new(std::sync::atomic::AtomicBool::new(true)), Arc::new(std::sync::atomic::AtomicBool::new(true))], vtrack: [None, None], cam: None, cam_gen: 0, cam_vout: None, cam_net: Default::default(), cam_idr: Arc::new(std::sync::atomic::AtomicBool::new(true)), cam_tx, cam_rx: Some(cam_rx), cam_watch: HashMap::new(), atrack: None, sev_tx, sev_rx: Some(sev_rx), seen_groups: HashSet::new(), hist: crate::history::Store::open(hist_dir()), hist_reqs: HashMap::new() }
+        Actor { fec_dcs: Arc::new(std::sync::Mutex::new(vec![])), vcodecs: crate::codec::local_caps(), cfg, identity, rt, ev, room_hash, validator, present: HashSet::new(), viewers: [HashSet::new(), HashSet::new()], peers: HashMap::new(), itx, irx: Some(irx), next_gen: 1, outbox: HashMap::new(), sent_notified: HashSet::new(), dm_off: HashSet::new(), watch_intent: HashMap::new(), remote_live: HashSet::new(), cam_live: HashSet::new(), seen_msgs: HashSet::new(), sons, annot, incoming: HashMap::new(), outgoing: HashMap::new(), pending: HashMap::new(), recv_dir: recv_dir(), ev_last_ts: 0, seen_events: HashSet::new(), audio, audio_rx, joined: HashMap::new(), banned: HashSet::new(), profile: (String::new(), String::new()), media: None, sfu_id: String::new(), dead: false, blocked: HashSet::new(), share: [None, None], share_gens: [0, 0], share_gen: 0, net: Default::default(), idr: [Arc::new(std::sync::atomic::AtomicBool::new(true)), Arc::new(std::sync::atomic::AtomicBool::new(true))], vtrack: [None, None], cam: None, cam_gen: 0, cam_vout: None, cam_net: Default::default(), cam_idr: Arc::new(std::sync::atomic::AtomicBool::new(true)), cam_tx, cam_rx: Some(cam_rx), cam_watch: HashMap::new(), atrack: None, sev_tx, sev_rx: Some(sev_rx), seen_groups: HashSet::new(), hist: crate::history::Store::open(hist_dir()), hist_reqs: HashMap::new() }
     }
 
     async fn run(&mut self, mut rt_events: mpsc::Receiver<RtEvent>, mut cmds: mpsc::Receiver<MeshCmd>) {
@@ -663,6 +667,7 @@ impl Actor {
                 let wire = json!({ "version": 1, "type": "room.chat", "id": id, "content": text, "timestamp": now_ms() });
                 for pid in self.authed_ids() { self.dc_send(&pid, wire.clone()).await; }
             }
+            MeshCmd::Annot { body } => { let o = self.annot.on_cmd(&body, now_ms() as u64); self.annot_out(o).await; }
             MeshCmd::SoundPlay { hash } => {
                 match self.sons.play(&self.identity.clone(), &hash, now_ms() as u64) {
                     Ok(o) => self.sons_out(o).await,
@@ -816,6 +821,20 @@ impl Actor {
             match o {
                 crate::sonsnet::NetOut::Ev(e) => self.emit(MeshEvent::Sound(e)).await,
                 crate::sonsnet::NetOut::Send { to, kind, mut body } => {
+                    body["version"] = json!(1); body["type"] = json!(kind);
+                    let ids = if to.is_empty() { self.authed_ids() } else { to.into_iter().filter(|k| self.peers.get(k).map(|p| p.sent_proof && p.proven).unwrap_or(false)).collect() };
+                    for id in ids { self.dc_send(&id, body.clone()).await; }
+                }
+            }
+        }
+    }
+
+    /// Entrega o que o `annot` mandou: mensagens aos pares autenticados e eventos (`annot.*`) para a UI.
+    async fn annot_out(&mut self, outs: Vec<crate::annot::NetOut>) {
+        for o in outs {
+            match o {
+                crate::annot::NetOut::Ev(e) => self.emit(MeshEvent::Sound(e)).await,
+                crate::annot::NetOut::Send { to, kind, mut body } => {
                     body["version"] = json!(1); body["type"] = json!(kind);
                     let ids = if to.is_empty() { self.authed_ids() } else { to.into_iter().filter(|k| self.peers.get(k).map(|p| p.sent_proof && p.proven).unwrap_or(false)).collect() };
                     for id in ids { self.dc_send(&id, body.clone()).await; }
@@ -1489,6 +1508,14 @@ impl Actor {
                 let kind = v["type"].as_str().unwrap_or("").to_string();
                 let o = self.sons.on_msg(&crate::sonsnet::PeerRef { key: peer, fp: &fp, jwk: &jwk }, &kind, &v, now_ms() as u64);
                 self.sons_out(o).await;
+            }
+            "annot.ops" | "annot.snap" | "annot.laser" | "annot.perm" | "annot.want" => {
+                // anotações/Board: só de par autenticado; o autor é a identidade provada do canal (annot.rs valida tudo o mais)
+                let Some(p) = self.peers.get(peer) else { return };
+                let (true, Some(fp)) = (p.proven && p.sent_proof, p.fp.clone()) else { return };
+                let kind = v["type"].as_str().unwrap_or("").to_string();
+                let o = self.annot.on_msg(&crate::annot::PeerRef { key: peer, fp: &fp }, &kind, &v, now_ms() as u64);
+                self.annot_out(o).await;
             }
             "stream.request" | "stream.reply" => {
                 let Some(p) = self.peers.get(peer) else { return };

@@ -649,6 +649,7 @@ async fn handle(s: TcpStream, token: &str, cfg: &Config, accounts: Arc<crate::ac
                         };
                         out(&mut wr, ev).await?;
                     }
+                    "annot.send" => { if let Some(c) = &mesh_cmd { let _ = c.send(MeshCmd::Annot { body: v.clone() }).await; } }   // anotações/Board (annot.rs)
                     // painel de sons: armazenamento local, importação e preferências (rede: sound.play/sound.fetch)
                     "sound.play" | "sound.fetch" => {
                         let h = v["hash"].as_str().filter(|h| crate::sons::valid_hash(h)).map(String::from);
