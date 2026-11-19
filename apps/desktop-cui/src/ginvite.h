@@ -3,7 +3,7 @@
 #define BRIKS_GINVITE_H
 #include "briks_ui.h"
 
-enum { GINV_PENDING = 0, GINV_ACCEPTED, GINV_DECLINED, GINV_EXPIRED, GINV_SENT };
+enum { GINV_PENDING = 0, GINV_ACCEPTED, GINV_DECLINED, GINV_EXPIRED, GINV_SENT, GINV_DELIVERED };
 
 bool ginvite_is(const char *content);                                           /* a mensagem é um convite de grupo? */
 /* mensagem de convite recebida/enviada/sincronizada: registra (idempotente por id), guarda o código só neste PC e devolve em `shown` o texto
@@ -16,6 +16,8 @@ int  ginvite_pending_from(const char *user_id);                                 
 int  ginvite_pending_total(void);
 void ginvite_expect(const char *friend_user, const char *gid);                  /* "Convidar": envia pela DM assim que o core assinar o grupo */
 void ginvite_set_code(const char *id, const char *code);                     /* chat.invite: pacote estruturado do convite recebido */
+void ginvite_acked(const char *id);                                       /* chat.ack: o cartão enviado chegou */
+void ginvite_tick(app_state_t *s);                                              /* aviso "não chegou" depois de ~2 min */
 void ginvite_signed(app_state_t *s, const char *gid, const char *gname, const char *code);
 void ginvite_verified(app_state_t *s, const char *gid, bool ok, const char *msg);   /* resultado do group.verify disparado por Entrar */
 bool ginvite_card(cui_ctx *ui, app_state_t *s, const msg_t *m);          /* desenha o cartão no balão; false se não é convite */

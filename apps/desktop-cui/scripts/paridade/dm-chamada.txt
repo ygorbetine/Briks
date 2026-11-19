@@ -1,0 +1,29 @@
+# 1.6: chamada individual e sinais da caixa de chegada. Amigo 0 tem fp-demo-0 (BRIKS_DEMO_FP); estranho é descartado.
+waitms 600
+expect dm_ringing 0
+coreev {"ev":"dm.signal","fp":"fp-estranho","kind":"call","data":{"room":"dm-aaaa1111","name":"Estranho"}}
+waitms 300
+expect dm_ringing 0
+coreev {"ev":"dm.signal","fp":"fp-demo-0","kind":"call","data":{"room":"sala-invalida","name":"Marina"}}
+waitms 300
+expect dm_ringing 0
+coreev {"ev":"dm.signal","fp":"fp-demo-0","kind":"call","data":{"room":"dm-aaaa1111","name":"Marina Costa"}}
+waitms 500
+expect dm_ringing 1
+shot chamada0-cartao
+coreev {"ev":"dm.signal","fp":"fp-demo-0","kind":"call","data":{"room":"dm-aaaa1111","name":"Marina Costa"}}
+waitms 300
+expect dm_ringing 1
+coreev {"ev":"dm.signal.gone","fp":"fp-demo-0","kind":"call","data":{"room":"dm-aaaa1111","name":"Marina Costa"}}
+waitms 400
+expect dm_ringing 0
+expect dm_notice 1
+shot chamada1-perdida
+coreev {"ev":"dm.signal","fp":"fp-demo-0","kind":"ginv","data":{"gid":"grp-1","name":"Noite de jogos","inviter":"Marina Costa"}}
+waitms 300
+expect dm_notice 1
+dmcall
+waitms 600
+expect dm_calling 1
+expect screen 2
+shot chamada2-chamando

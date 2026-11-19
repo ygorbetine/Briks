@@ -558,7 +558,6 @@ async fn handle(s: TcpStream, token: &str, cfg: &Config, accounts: Arc<crate::ac
                             let _ = tx.blocking_send(ev);
                         });
                     }
-                    "chat.event.send" => {
                     "codec.probe" => {
                         // teste de ~3 s em thread própria; a resposta volta como evento `codec.result`
                         let (h, fps, rid, tx) = (v["height"].as_u64().unwrap_or(1080) as u32, v["fps"].as_u64().unwrap_or(30) as u32, v["id"].clone(), link_tx.clone());
@@ -568,6 +567,7 @@ async fn handle(s: TcpStream, token: &str, cfg: &Config, accounts: Arc<crate::ac
                             let _ = tx.blocking_send(ev);
                         });
                     }
+                    "chat.event.send" => {
                         let (Some(ch), Some(target), Some(action)) = (v["channel"].as_str(), v["target"].as_str(), v["action"].as_str()) else { continue };
                         let opt = |k: &str| v[k].as_str().map(|x| x.to_string());
                         if let Some(c) = &mesh_cmd {
@@ -876,6 +876,7 @@ async fn handle(s: TcpStream, token: &str, cfg: &Config, accounts: Arc<crate::ac
                         signals.insert(key.clone(), crate::dmlink::send_signal(RealtimeCfg::new(&url, &rkey), to, meta, hold));
                         out(&mut wr, json!({ "ev": "dm.signal.sent", "key": key, "ok": true })).await?;
                     }
+                    "dm.log" => { if let Some(t) = v["text"].as_str() { crate::netlog::write(&format!("ui: {}", t.chars().take(200).collect::<String>())); } }
                     "dm.signal.stop" => {
                         if let Some(old) = v["key"].as_str().and_then(|k| signals.remove(k)) { crate::netlog::write("sinal retirado"); old.close().await; }
                     }

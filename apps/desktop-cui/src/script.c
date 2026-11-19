@@ -119,6 +119,7 @@ void script_tick(cui_ctx *ui) {
         else if (!strcmp(cmd, "msgstate")) { char *a = strtok(NULL, " "), *b = strtok(NULL, " "); if (a && b) attach_script_state(NULL, atoi(a), b); }   /* msgstate <n> sending|sent|failed|delivered|ack */
         else if (!strcmp(cmd, "media")) { char *r = strtok(NULL, ""); if (r) media_script(r); }   /* media play <arquivo> | pause | resume | seek <ms> | stop (1.4.3) */
         else if (!strcmp(cmd, "sons")) { char *a = strtok(NULL, " "), *b = strtok(NULL, ""); if (a) sons_script(NULL, a, b); }   /* sons seed|add [nome]|ack|sel <n>|stop (1.5) */
+        else if (!strcmp(cmd, "dmcall")) attach_script_event("{\"ev\":\"dmcall.script\"}");   /* dmcall: Ligar para o amigo 0 (teste) */
         else if (!strcmp(cmd, "coreev")) { char *r = strtok(NULL, ""); if (r) attach_script_event(r); }   /* coreev <json>: injeta um evento do core (DM recebida, chat.sent…) */
         else if (!strcmp(cmd, "clipimg")) { char *r = strtok(NULL, ""); if (briks_clip_fake()) attach_fake_image(r); else fputs("roteiro: clipimg ignorado (sem BRIKS_FAKE_CLIPBOARD)\n", stderr); }
         else if (!strcmp(cmd, "expect")) {   /* expect <estado> <valor>: confere e conta falha (o processo sai com código 1) */

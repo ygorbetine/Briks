@@ -158,7 +158,7 @@ bool chat_outbox_event(app_state_t *s, const jval *j) {   /* outbox.state do cor
 void chat_outbox_acked(const char *id) {   /* chat.ack: entregue */
     const int k = id[0] ? pend_find(id) : -1;
     if (k >= 0) { memmove(&g_pend[k], &g_pend[k + 1], sizeof g_pend[0] * (size_t)(g_pend_n - k - 1)); g_pend_n--; }
-    if (id[0]) { ob_push(g_dlv, &g_dlv_n, id); ob_del(g_fld, &g_fld_n, id); }
+    if (id[0]) { ob_push(g_dlv, &g_dlv_n, id); ob_del(g_fld, &g_fld_n, id); ginvite_acked(id); }
 }
 
 /* a cada ~4 s: com mensagem pendente para um amigo que está online (presença) e fora da sala, reabre o canal direto (toque na caixa dele);
@@ -395,6 +395,7 @@ void app_demo(app_state_t *s, const char *mode) {
         snprintf(s->blocked[0].name, sizeof s->blocked[0].name, "Fulano Spam"); snprintf(s->blocked[0].id, sizeof s->blocked[0].id, "x1"); s->blocked_count = 1;
         for (int i = 0; i < 3; i++) snprintf(s->friends[i].nick, sizeof s->friends[i].nick, "%s", i == 0 ? "marina" : i == 1 ? "rafa_lima" : "bianog");
     } }
+    if (getenv("BRIKS_DEMO_FP")) snprintf(s->friends[0].fp, sizeof s->friends[0].fp, "fp-demo-0");   /* teste: identidade conhecida, SEM entrar em sala */
     if (getenv("BRIKS_DEMO_P2P")) { snprintf(s->friends[0].fp, sizeof s->friends[0].fp, "fp-demo-0"); s->in_room = true; }   /* captura: chamada aberta e identidade conhecida (menu Desconectar P2P) */
     s->active_group = -1; s->active_friend = -1;
     s->screen = SCREEN_SOCIAL;

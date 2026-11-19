@@ -9,6 +9,8 @@
 #include "json.h"
 #include "core.h"
 #include "storage.h"
+#include "dmcall.h"
+#include "sysint.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,7 +20,7 @@
 #define PFX "briks-invite:1|"
 #define NINV 64
 #define EXPIRE_S (7 * 24 * 3600)   /* um convite recebido vale 7 dias */
-typedef struct { bool used; char id[48], gid[48], name[64], inviter[64], from[48]; int st; long long created; char *code; } inv_t;
+typedef struct { bool used, warned; char id[48], gid[48], name[64], inviter[64], from[48]; int st; long long created; char *code; } inv_t;
 static inv_t g_inv[NINV]; static bool g_loaded; static int g_wait = -1;   /* g_wait: cartão cujo Entrar espera a conferência do core */
 static char g_expect_user[48], g_expect_gid[48];                          /* convite a enviar pela DM quando o core terminar de assinar o grupo */
 
@@ -96,6 +98,24 @@ int ginvite_state(const char *id) { inv_t *e = find(id); return !e ? -1 : expire
 int ginvite_pending_from(const char *user_id) { if (!g_loaded) load(); int n = 0; for (int i = 0; i < NINV; i++) if (g_inv[i].used && g_inv[i].st == GINV_PENDING && !expired(&g_inv[i]) && !strcmp(g_inv[i].from, user_id)) n++; return n; }
 int ginvite_pending_total(void) { if (!g_loaded) load(); int n = 0; for (int i = 0; i < NINV; i++) if (g_inv[i].used && g_inv[i].st == GINV_PENDING && !expired(&g_inv[i])) n++; return n; }
 
+/* ---- estado do convite enviado: Aguardando -> Entregue (ACK do cartão) ou "Não chegou" depois de 2 min ---- */
+#define GINV_WAIT_S 120
+static void ginv_key(char *o, size_t cap, const char *gid, const char *user) { snprintf(o, cap, "ginv-%s-%s", gid, user); }
+void ginvite_acked(const char *id) {
+    inv_t *e = find(id); if (!e || e->st != GINV_SENT) return;
+    e->st = GINV_DELIVERED; save();
+    char key[96]; ginv_key(key, sizeof key, e->gid, e->from); dmcall_signal_stop(key);   /* já chegou: retira o sinal */
+    dmcall_log("convite de grupo: entregue (ACK do cartao)");
+}
+void ginvite_tick(app_state_t *s) {
+    static ULONGLONG last; ULONGLONG now = GetTickCount64(); if (now - last < 5000) return; last = now;
+    if (!g_loaded) load();
+    for (int i = 0; i < NINV; i++) if (g_inv[i].used && g_inv[i].st == GINV_SENT && !g_inv[i].warned && (long long)time(NULL) - g_inv[i].created > GINV_WAIT_S) {
+        g_inv[i].warned = true; char t[200]; snprintf(t, sizeof t, "O convite para %s ainda não chegou. Continua na fila e chega quando a pessoa estiver online.", g_inv[i].name);
+        snprintf(s->notice, sizeof s->notice, "%s", t); notify_post(s, NT_INFO, NULL, "Briks", t); dmcall_log("convite de grupo: nao chegou em 2 min (segue na fila)");
+    }
+}
+
 /* ---- enviar ---- */
 void ginvite_expect(const char *friend_user, const char *gid) { snprintf(g_expect_user, sizeof g_expect_user, "%s", friend_user); snprintf(g_expect_gid, sizeof g_expect_gid, "%s", gid); }
 void ginvite_signed(app_state_t *s, const char *gid, const char *gname, const char *code) {   /* o core assinou o grupo: se era um convite a enviar, vai pela DM */
@@ -105,7 +125,12 @@ void ginvite_signed(app_state_t *s, const char *gid, const char *gname, const ch
     if (fi < 0) return;
     char n[64], iv[64]; clean(n, sizeof n, gname); clean(iv, sizeof iv, s->user_name[0] ? s->user_name : "Alguém");
     char wire[300]; snprintf(wire, sizeof wire, PFX "%s|%s|%s", gid, n, iv);   /* texto curto assinado; o código vai em campo próprio (package) */
-    if (strlen(code) <= 45000 && chat_dm_post(s, fi, wire, code)) snprintf(s->notice, sizeof s->notice, "Convite enviado a %s pela conversa. Chega quando a pessoa estiver online.", s->friends[fi].name);
+    if (strlen(code) <= 45000 && chat_dm_post(s, fi, wire, code)) {
+        snprintf(s->notice, sizeof s->notice, "Convite enviado a %s. Aguardando a entrega…", s->friends[fi].name);
+        char key[96]; ginv_key(key, sizeof key, gid, s->friends[fi].id);
+        dmcall_signal_ginv(s, &s->friends[fi], gid, n, iv, key);   /* avisa pela caixa de chegada, sem depender do canal direto */
+        dmcall_log("convite de grupo: sinal ginv enviado e mensagem na fila");
+    }
     else snprintf(s->notice, sizeof s->notice, "Não foi possível enviar o convite pela conversa agora: use o botão de copiar o código.");
 }
 void ginvite_set_code(const char *id, const char *code) {   /* chat.invite do core: o pacote estruturado do convite recebido */
@@ -142,7 +167,11 @@ bool ginvite_card(cui_ctx *ui, app_state_t *s, const msg_t *m) {
         cui_row(ui, .gap = 6, .align = CUI_ALIGN_CENTER) { cui_icon(ui, CUI_ICON_USERS, 14, B_C3); cui_text(ui, "Convite para o grupo", .size = 11, .color = B_MUTED); }
         cui_text(ui, name, .font = CUI_FONT_MEDIUM, .size = 15, .nowrap = true);
         if (!m->mine) { char de[96]; snprintf(de, sizeof de, "de %s", inv); cui_text(ui, de, .size = 12, .color = B_MUTED, .nowrap = true); }
-        if (m->mine || st == GINV_SENT) cui_text(ui, "Convite enviado. A pessoa decide se entra.", .size = 12, .color = B_MUTED);
+        if (m->mine || st == GINV_SENT || st == GINV_DELIVERED) {
+            if (st == GINV_DELIVERED) cui_text(ui, "Entregue. A pessoa decide se entra.", .size = 12, .color = CUI_RGB(0x7dd3fc));
+            else if (e && (long long)time(NULL) - e->created > GINV_WAIT_S) cui_text(ui, "Não chegou ainda: segue na fila até a pessoa ficar online.", .size = 12, .color = CUI_RGB(0xf5d9a0), .width = CUI_FILL);
+            else cui_text(ui, "Aguardando entrega…", .size = 12, .color = B_MUTED);
+        }
         else if (st == GINV_PENDING && e) {
             cui_row(ui, .gap = 8) {
                 if (cui_button(ui, "Entrar", .variant = CUI_BUTTON_PRIMARY, .size = CUI_SIZE_SM, .loading = g_wait == (int)(e - g_inv))) inv_accept(s, e);

@@ -7,6 +7,7 @@
 #include "backend.h"
 #include "core.h"
 #include "ginvite.h"
+#include "dmcall.h"
 #include "sysint.h"
 #include "sons.h"
 #include <stdlib.h>
@@ -74,6 +75,9 @@ int script_probe(const char *n) {
     if (!strcmp(n, "win_w") || !strcmp(n, "win_h")) { RECT r; if (state.app && GetClientRect((HWND)cui_app_native_window(state.app), &r)) return n[4] == 'w' ? (int)(r.right - r.left) : (int)(r.bottom - r.top); return -1; }
     if (!strncmp(n, "media_", 6)) { int mp = media_probe(n + 6); if (mp != -9999) return mp; }   /* 1.4.3: state, playing, pos_ms, dur_ms, frames */
     if (!strncmp(n, "attach_", 7)) return attach_probe(n + 7);   /* pending, pending_img, search_on, search_len, palette, pal_len */
+    if (!strcmp(n, "dm_ringing")) return dmcall_ringing();                              /* chamadas recebidas com cartão aberto */
+    if (!strcmp(n, "dm_calling")) return dmcall_calling() ? 1 : 0;                      /* chamada saindo */
+    if (!strcmp(n, "dm_notice")) return state.notice[0] ? 1 : 0;
     if (!strcmp(n, "ginv_total")) return ginvite_pending_total();                      /* convites de grupo esperando resposta */
     if (!strcmp(n, "ginv_from0")) return state.friend_count ? ginvite_pending_from(state.friends[0].id) : 0;
     if (!strcmp(n, "ginv_st")) { for (int i = state.msg_count - 1; i >= 0; i--) if (ginvite_is(state.msgs[i].content)) return ginvite_state(state.msgs[i].id); return -9; }   /* estado do cartão mais recente */
@@ -130,6 +134,7 @@ static void frame(cui_ctx *ui) {
     msgui_pump(&state);
     profile_tick(&state);
     sys_tick(&state);
+    dmcall_tick(&state);
     settings_tick();
     fw_tick();
     hotkeys_tick(ui, &state);
@@ -149,12 +154,14 @@ static void frame(cui_ctx *ui) {
             net_banner(ui, &state);      /* pílula no topo: sem conexão / reconectando / restabelecida */
             media_frame(ui);             /* 1.4.3: player inline para se a prévia saiu da tela */
             idle_banner(ui, &state);     /* CHM-16: aviso de inatividade na chamada */
+            dmcall_overlay(ui, &state);  /* faixa "Chamando…" da chamada individual */
             update_banner(ui, &state);   /* dentro da pilha: sobrepõe a tela sem ocupar espaço do layout */
             if (getenv("BRIKS_SCRIPT")) script_overlay(ui);
         }
     }
     migrate_dialog(ui, &state);
     update_dialog(ui, &state);
+    dmcall_dialog(ui, &state);   /* "<nome> está te ligando": Atender / Recusar, em qualquer tela */
     fw_dialog(ui, &state);   /* primeira chamada: liberar o Briks no Firewall (nunca bloqueia a chamada) */
     briks_theme_editor(ui);   /* Ctrl+Shift+T com BRIKS_DEV=1 */
 }
