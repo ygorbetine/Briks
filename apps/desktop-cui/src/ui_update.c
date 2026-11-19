@@ -69,6 +69,20 @@ void update_dialog(cui_ctx *ui, app_state_t *s) {
 
 typedef struct { const char *version; const char *items[14]; } notes_t;
 static const notes_t NOTES[] = {
+    { "1.6.0", {
+        "Chamada individual: o botão Ligar no perfil do amigo abre uma sala só de vocês dois, sem precisar de grupo. O amigo recebe um cartão para atender ou recusar.",
+        "Convites de grupo: agora chegam também por um sinal direto entre amigos, além da mensagem. O convite mostra se está aguardando, foi entregue ou não chegou.",
+        "Chamada: clicar no bloco de quem está transmitindo abre a aba Transmissão.",
+        "Transmissão: dá para parar de ver a transmissão de uma pessoa e voltar a ver depois. Parar de ver desliga o download e a decodificação, e o Briks lembra a escolha para amigos.",
+        "Codec: nova opção Automático e o botão Testar meu PC, que recomenda H.264 ou VP9 conforme o seu computador.",
+        "Tremer a tela: o sino na conversa chama a atenção do amigo, com Não perturbar e limite de envios. Dá para escolher tela inteira, só a janela do Briks ou só o aviso.",
+        "Áudio da transmissão: painel com o nível de cada app, Só este e Tudo menos a chamada, e o mesmo painel no diálogo de iniciar a transmissão.",
+        "Anotações nas transmissões (caneta, formas, preenchimento, apagar) e a janela Board da sala.",
+        "Perfil: status personalizado com texto curto, mostrado para os amigos.",
+        "Chamada: desconecta depois de 1 hora sem falar, com aviso e o botão Continuar. O Briks também lembra o estado do microfone e do ensurdecer.",
+        "Novo botão Enviar log em Configurações e mensagens de erro da chamada em português.",
+        "Bitrate adaptativo: reage mais rápido a quedas de rede e perde menos qualidade com pequenas perdas de pacote.",
+        NULL } },
     { "1.5.32", {
         "Convites: o código curto (BRK-XXXX-XXXX) voltou a funcionar: antes o pedido nunca chegava ao servidor e o botão ficava em \"Gerando…\" até desistir. Entrar com o código curto também foi consertado.",
         NULL } },
