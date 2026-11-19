@@ -1,0 +1,21 @@
+# QoL-6: com 2+ transmissões aparece o botão "Parar de ver" na barra do modo Transmissão; o menu esconde/mostra cada uma (safety_hide/safety_reveal)
+waitms 1500
+shot pv0
+expect hidden_n 0
+mat 1207 74
+waitms 300
+mclick 1207 74
+waitms 600
+shot pv1
+mclick 1175 155
+waitms 500
+expect hidden_n 1
+shot pv2
+mat 1207 74
+waitms 300
+mclick 1207 74
+waitms 600
+shot pv3
+mclick 1175 155
+waitms 500
+expect hidden_n 0

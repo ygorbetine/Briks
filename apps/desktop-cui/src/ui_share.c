@@ -1307,6 +1307,32 @@ static int g_eye = -1; static char g_eye_tip[220];   /* olho + número de quem a
 static app_state_t *g_vt_s;   /* estado do app para o menu do botão direito do bloco (volume da pessoa e da transmissão) */
 static bool video_tile(cui_ctx *ui, int key, cui_texture tex, int tw, int th, const char *title, const char *chip, const char *wait, float *volume, cui_image_view *zv, bool compact) {
     int zoom_pct = 100; bool clicked = false;
+/* QoL-6: atalho "Parar de ver" na barra da chamada (modo Transmissão) quando há 2 ou mais transmissões: um menu com cada transmissão e, nela, Parar de ver / Voltar a ver
+ * (mesmas funções do menu do botão direito: safety_hide / safety_reveal). Devolve true se desenhou o botão. */
+bool share_hide_chip(cui_ctx *ui, app_state_t *s, bool compact) {
+    (void)compact;
+    int live[BRIKS_MAX_PEERS], n = 0, hid = 0;
+    for (int i = 0; i < BRIKS_MAX_PEERS; i++) if (s->rtc_peers[i].id[0] && share_peer_live(s, i)) { live[n++] = i; if (safety_hidden(s, i)) hid++; }
+    if (n < 2) return false;
+    cui_push_id_int(ui, 910);
+    cui_box(ui, .id = "b", .dir = CUI_ROW, .height = CUI_PX(38), .gap = 7, .pad_x = 12, .radius = 12, .bg = B_GLASS, .border = 1, .border_color = B_GLASS_BORDER, .align = CUI_ALIGN_CENTER, .justify = CUI_JUSTIFY_CENTER) {
+        cui_icon(ui, hid ? CUI_ICON_EYE_OFF : CUI_ICON_EYE, 16, B_TEXT);
+        if (hid) { char t[8]; snprintf(t, sizeof t, "%d", hid); cui_text(ui, t, .size = 13, .nowrap = true); }   /* só o ícone (a barra é estreita); o número é quantas estão ocultas */
+    }
+    if (briks_hover(ui, "b")) briks_tip(hid ? "Transmissões ocultas: abrir o menu" : "Parar de ver uma das transmissões");
+    if (briks_clicked(ui, "b")) cui_popover_open(ui, "hidemenu");
+    cui_popover(ui, "hidemenu", .anchor = cui_make_id(ui, "b"), .placement = CUI_PLACE_BOTTOM_START, .pad = 6, .gap = 4) {
+        cui_menu_label(ui, "Transmissões");
+        for (int k = 0; k < n; k++) {
+            const int i = live[k]; const bool h = safety_hidden(s, i); char t[120];
+            snprintf(t, sizeof t, "%s · %s", h ? "Voltar a ver" : "Parar de ver", s->rtc_peers[i].name[0] ? s->rtc_peers[i].name : "Participante");
+            if (cui_menu_item(ui, t, .icon = h ? CUI_ICON_EYE : CUI_ICON_EYE_OFF)) { if (h) safety_reveal(s, i); else safety_hide(s, i, true); cui_popover_close(ui, "hidemenu"); }
+        }
+    }
+    cui_pop_id(ui);
+    return true;
+}
+
     if (compact) { chip = NULL; volume = NULL; zv = NULL; }   /* miniatura da faixa do Foco: só a imagem e o nome; clicar traz para o destaque */
     if (key >= 0 && key < 2 * FV_N) g_zoom_pct[key] = 100;
     cui_push_id_int(ui, 800 + key);

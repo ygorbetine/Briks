@@ -888,6 +888,7 @@ void ui_call(cui_ctx *ui, app_state_t *s) {
                             if (tab(ui, 13, CUI_ICON_VIDEO, "Chamada", s->call_view == 0, compact, 0)) s->call_view = 0;
                             if (tab(ui, 14, CUI_ICON_MESSAGE_SQUARE, "Chat", s->call_view == 1, compact, s->call_view == 1 ? 0 : g_call.unread)) s->call_view = 1;
                         }
+                        if (s->call_mode == 1 && s->call_view == 0) share_hide_chip(ui, s, compact);   /* QoL-6 */
                         if (head_icon(ui, 901, CUI_ICON_MAXIMIZE_2, "Tela cheia (F11)")) call_set_fullscreen(s, true);
                     }
                 }

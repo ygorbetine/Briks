@@ -12,6 +12,7 @@
 #include "callhist.h"
 #include "json.h"
 #include "lognet.h"
+#include "safety.h"
 void update_settings_cards(cui_ctx *ui, app_state_t *s); int update_probe(const char *n);   /* ui_update.c */
 int overlay_tile_count(void); const char *overlay_tile_name(int j); bool overlay_tile_enabled(int j); void overlay_tile_enable(int j, bool on);   /* overlay_host.c */
 void overlay_edit_toggle(void); bool overlay_edit_active(void); void overlay_edit_set(bool on); void settings_ovl_reset(void);   /* overlay_host.c */
@@ -370,6 +371,7 @@ int settings_probe(const char *n, app_state_t *s) {
     { int op = overlay_probe(n); if (op != -9999) return op; }
     { int cp = cam_probe(n); if (cp != -9999) return cp; }
     if (!strcmp(n, "log_sent")) return g_log_sent;
+    if (!strcmp(n, "hidden_n")) { int c = 0; for (int i = 0; i < BRIKS_MAX_PEERS; i++) if (s->rtc_peers[i].id[0] && safety_hidden(s, i)) c++; return c; }   /* teste: transmissões com "Parar de ver" */
     if (!strncmp(n, "rtcmsg:", 7)) { char w[160]; size_t k = 0; for (const char *q = n + 7; *q && k < sizeof w - 1; q++) w[k++] = *q == '+' ? ' ' : *q; w[k] = 0; return strstr(s->rtc_msg, w) != NULL; }   /* teste: a mensagem de erro da chamada contém o texto */
     if (!strcmp(n, "cfg_ov_on")) return g_set.ov_on;
     if (!strcmp(n, "cfg_ov_tiles")) { int c = 0; for (const char *p = g_set.ov_tiles; *p; p++) if (*p == ';') c++; return g_set.ov_tiles[0] ? c + 1 : 0; }
