@@ -20,7 +20,7 @@ expect share_vol_0 0
 mclick 937 681
 waitms 300
 expect share_vol_0 105
-snap e2
+shot e2
 mclick 257 787
 waitms 400
 expect deaf_on 0

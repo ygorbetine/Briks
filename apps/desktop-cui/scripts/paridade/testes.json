@@ -1,14 +1,14 @@
 {
   "_ajuda": "Cada caso abre o app OCULTO no modo demo, roda o roteiro e compara capturas: esperado 'muda' = a tela mudou (a ação teve efeito visível); 'igual' = não mudou (voltou ao estado anterior ou o controle é inerte). Itens PRESENTE-SEM-EFEITO só usam 'igual'.",
   "casos": [
-    { "id": "auth-a", "demo": "login", "roteiro": "auth-a.txt", "checagens": [
+    { "id": "auth-a", "demo": "login", "roteiro": "auth-a.txt", "env": { "BRIKS_DEV_ACCT": "login" }, "checagens": [
       { "item": "AUT-01", "de": "a0", "para": "a1", "esperado": "muda" },
       { "item": "AUT-04", "de": "a1", "para": "a2", "esperado": "muda" } ] },
-    { "id": "auth-b", "demo": "login", "roteiro": "auth-b.txt", "checagens": [
+    { "id": "auth-b", "demo": "login", "roteiro": "auth-b.txt", "env": { "BRIKS_DEV_ACCT": "signup" }, "checagens": [
       { "item": "AUT-02", "de": "b0", "para": "b1", "esperado": "muda" } ] },
-    { "id": "auth-c", "demo": "login", "roteiro": "auth-c.txt", "checagens": [
+    { "id": "auth-c", "demo": "login", "roteiro": "auth-c.txt", "env": { "BRIKS_DEV_ACCT": "login" }, "checagens": [
       { "item": "AUT-09", "de": "c1", "para": "c2", "esperado": "muda" },
-      { "item": "AUT-10", "de": "c0", "para": "c3", "esperado": "igual" } ] },
+      { "item": "AUT-10", "de": "c2", "para": "c3", "esperado": "muda", "min": 800 } ] },
     { "id": "social-a", "demo": "social", "roteiro": "social-a.txt", "checagens": [
       { "item": "AMI-13", "de": "s0", "para": "s1", "esperado": "muda" },
       { "item": "AMI-02", "de": "s1", "para": "s2", "esperado": "muda" },

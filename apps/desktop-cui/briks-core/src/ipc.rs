@@ -91,12 +91,14 @@ mod cfg_tests {
     fn realtime_falls_back_to_supabase_json_and_keeps_precedence() {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let d = dir("a");
+        crate::netmode::set_loopback_only(false);   // o cargo test liga o modo local sozinho e ele ignora o supabase.json remoto: sem isto o resultado dependia da ordem dos testes
         std::fs::write(d.join("supabase.json"), r#"{"url":"https://abc.supabase.co","anon_key":"KEYFILE"}"#).unwrap();
         assert_eq!(pair(&config_with(&none, d.clone())), (Some("https://abc.supabase.co"), Some("KEYFILE")));
         let vite = |k: &str| match k { "VITE_SUPABASE_URL" => Some("https://vite.supabase.co".into()), "VITE_SUPABASE_ANON_KEY" => Some("KEYVITE".into()), _ => None };
         assert_eq!(pair(&config_with(&vite, d.clone())), (Some("https://vite.supabase.co"), Some("KEYVITE")));
         let both = |k: &str| match k { "BRIKS_REALTIME_URL" => Some("ws://x".into()), "BRIKS_REALTIME_KEY" => Some("KEYB".into()), _ => vite(k) };
         assert_eq!(pair(&config_with(&both, d.clone())), (Some("ws://x"), Some("KEYB")));
+        crate::netmode::set_loopback_only(true);   // devolve o padrao seguro dos testes (sem rede)
         let _ = std::fs::remove_dir_all(&d);
     }
 
@@ -108,7 +110,7 @@ mod cfg_tests {
         std::fs::write(d.join("supabase.json"), r#"{"url":"https://abc.supabase.co","anon_key":"K"}"#).unwrap();
         crate::netmode::set_loopback_only(true);
         let c = config_with(&none, d.clone());
-        crate::netmode::set_loopback_only(false);
+        crate::netmode::set_loopback_only(true);   // era false: deixava a rede liberada para os outros testes
         assert!(c.realtime_url.is_none() && c.realtime_key.is_none());
         let _ = std::fs::remove_dir_all(&d);
     }

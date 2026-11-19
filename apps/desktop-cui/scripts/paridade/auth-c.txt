@@ -1,6 +1,5 @@
-# Auth: mostrar/ocultar senha e voltar para Google/Discord
+# Auth: mostrar/ocultar senha e voltar para Google/Discord (formulario aberto por BRIKS_DEV_ACCT=login)
 snap c0
-mtap 570 659
 mtap 620 473
 type abc12345
 snap c1
