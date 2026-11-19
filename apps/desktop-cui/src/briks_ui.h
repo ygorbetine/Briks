@@ -351,10 +351,10 @@ bool fw_busy(void); bool fw_open(void); int fw_exists(void); const char *fw_msg(
 int settings_net_pref(void);                               /* 0 Automático, 1 Internet direta, 2 VPN privada */
 int settings_idle_min(void);                              /* CHM-35: minutos sem falar até sair da chamada (0 = nunca) */
 int settings_call_mode(void);                              /* 0 Automático, 1 P2P, 2 SFU (Configurações > Rede) */
-void settings_call_mode_set(int mode);                        /* escolha explícita do usuário (Configurações > Rede e menu da qualidade da conexão na call) */
 void settings_codec_mode_set(int m); int settings_codec_mode(void);   /* codec da transmissão: 0 Automático, 1 H.264, 2 VP9, 3 VP8 (settings.c) */
 const char *settings_codec_rec(void); const char *settings_codec_msg(void); bool settings_codec_hw(void); int settings_codec_h(void);   /* último "Testar meu PC" */
 void settings_codec_result_set(const char *rec, bool hw, int h, const char *msg);
+void settings_call_mode_set(int mode);                        /* escolha explícita do usuário (Configurações > Rede e menu da qualidade da conexão na call) */
 void settings_audio(float *in_gain, float *out_gain, bool *gate_on, float *gate_db);   /* ganhos 0..1 (1 = normal) e porta de ruído, para o core */
 void settings_audio_ex(char *mic, size_t mic_cap, char *out, size_t out_cap, int *noise_off);   /* dispositivos escolhidos (nome; vazio = padrão) e supressão de ruído (1 = desligada) */
 void rtc_mic_test(app_state_t *s, bool on);               /* rtc.c: teste do microfone fora da chamada (eventos mic.test) */
@@ -373,11 +373,11 @@ void briks_theme_reset(void);                              /* restaura o tema Br
 long long profile_expiry_for(int clear, long long now);   /* epoch de expiração do status; 0 = nunca */
 bool profile_ignored(const app_state_t *s, const char *exe, const char *text);
 void profile_tick(app_state_t *s);
+size_t profile_clean_text(char *t, size_t max_chars);   /* texto de usuário (status): UTF-8 válido, sem controles/quebras/bidi, espaços colapsados, até max_chars caracteres; devolve os caracteres que sobraram */
+#define STATUS_MAX_CHARS 64                                      /* limite do status (o servidor e o core cortam em 64) */
 void friends_notify_tick(app_state_t *s);                       /* detecta amigo que ficou online / entrou na chamada */
 void friends_notify_banner(cui_ctx *ui, app_state_t *s);        /* faixa de aviso (some sozinha em ~7 s) */
 bool friends_online(const app_state_t *s, const person_t *p);   /* online de verdade (batimento) ou na sua chamada agora */
-size_t profile_clean_text(char *t, size_t max_chars);   /* texto de usuário (status): UTF-8 válido, sem controles/quebras/bidi, espaços colapsados, até max_chars caracteres; devolve os caracteres que sobraram */
-#define STATUS_MAX_CHARS 64                                      /* limite do status (o servidor e o core cortam em 64) */
 void account_presence_tick(app_state_t *s);                      /* batimento de ~60 s (account.c) */                              /* perfil local: presença do programa em uso, persistência (profile.c) */
 void rtc_set_mic(app_state_t *s, bool on);
 void rtc_set_deaf(app_state_t *s, bool on);

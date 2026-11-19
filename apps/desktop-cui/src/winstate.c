@@ -326,12 +326,12 @@ int sys_probe(const char *n) {
     if (!strcmp(n, "links")) return g_links;
     if (!strcmp(n, "url_ok")) return g_url_ok; if (!strcmp(n, "url_bad")) return g_url_bad;
     if (!strcmp(n, "mic")) return g_s ? g_s->mic_on : -1;
+    if (!strcmp(n, "sys_mic")) return g_sys.mic_on;   /* lembrado entre chamadas e aberturas (sistema.cfg) */
+    if (!strcmp(n, "sys_deaf")) return g_sys.deaf;
     if (!strcmp(n, "active_group")) return g_s ? g_s->active_group : -1;
     if (!strcmp(n, "active_friend")) return g_s ? g_s->active_friend : -1;
     if (!strcmp(n, "tray_visible")) return tray_visible();
     if (!strcmp(n, "tray_icon_badged")) return g_tray_icon_badged;
-    if (!strcmp(n, "sys_mic")) return g_sys.mic_on;   /* lembrado entre chamadas e aberturas (sistema.cfg) */
-    if (!strcmp(n, "sys_deaf")) return g_sys.deaf;
     if (!strcmp(n, "tb_hit")) return titlebar_hit_result();
     if (!strncmp(n, "nudge_", 6)) { int np = nudge_probe(n + 6); if (np != -9999) return np; }
     return titlebar_probe(n);

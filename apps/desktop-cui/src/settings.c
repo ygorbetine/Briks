@@ -47,11 +47,10 @@ typedef struct {
     char ov_tiles[480], ov_toff[120];   /* miniaturas de transmissão do overlay: "chave|monitor|x|y|%;..." (posição/escala) e chaves ocultas "chave;chave" */
     char grp_coll[190];   /* grupos recolhidos na lateral: hashes FNV-1a (8 hex) separados por ";" (1.4.2: persiste entre reinicios) */
     char ov_lay[190], ov_dev[48];   /* posições da sobreposição por monitor ("dev|x|y|w;...") e o monitor ativo */
-} settings_t;
     int codec_mode;               /* codec da transmissão: 0 Automático (padrão), 1 H.264, 2 VP9, 3 VP8 */
     char codec_rec[8], codec_msg[320]; bool codec_hw; int codec_h;   /* último "Testar meu PC": codec recomendado, se é por placa, altura testada e o texto em português simples */
+} settings_t;
 settings_t g_set;
-int settings_call_mode(void) { return g_set.call_mode; }
 int settings_codec_mode(void) { return g_set.codec_mode < 0 || g_set.codec_mode > 3 ? 0 : g_set.codec_mode; }
 void settings_codec_mode_set(int m) { if (m >= 0 && m <= 3) g_set.codec_mode = m; }
 const char *settings_codec_rec(void) { return g_set.codec_rec; }
@@ -59,6 +58,7 @@ const char *settings_codec_msg(void) { return g_set.codec_msg; }
 bool settings_codec_hw(void) { return g_set.codec_hw; }
 int settings_codec_h(void) { return g_set.codec_h; }
 void settings_codec_result_set(const char *rec, bool hw, int h, const char *msg) { snprintf(g_set.codec_rec, sizeof g_set.codec_rec, "%s", rec ? rec : ""); g_set.codec_hw = hw; g_set.codec_h = h; snprintf(g_set.codec_msg, sizeof g_set.codec_msg, "%s", msg ? msg : ""); }
+int settings_call_mode(void) { return g_set.call_mode; }
 void settings_call_mode_set(int mode) { if (mode < 0 || mode > 2) return; g_set.call_mode = mode; g_set.call_mode_set = true; }
 int settings_idle_min(void) { return g_set.idle_min < 0 ? 0 : g_set.idle_min; }
 int settings_net_pref(void) { return g_set.net_pref; }
@@ -90,8 +90,8 @@ static const struct { const char *k; char t; void *p; int cap; } F[] = {
     { "telemetry", 'b', &g_set.telemetry }, { "idle_min", 'i', &g_set.idle_min }, { "text_size", 'i', &g_set.text_size },
     { "grp_coll", 's', g_set.grp_coll, 190 }, { "ov_lay", 's', g_set.ov_lay, 190 }, { "ov_dev", 's', g_set.ov_dev, 48 },
     { "ov_tiles", 's', g_set.ov_tiles, 480 }, { "ov_toff", 's', g_set.ov_toff, 120 },
-};
     { "codec_mode", 'i', &g_set.codec_mode }, { "codec_rec", 's', g_set.codec_rec, 8 }, { "codec_msg", 's', g_set.codec_msg, 320 }, { "codec_hw", 'b', &g_set.codec_hw }, { "codec_h", 'i', &g_set.codec_h },
+};
 #define NF ((int)(sizeof F / sizeof *F))
 
 static void defaults(void) {
