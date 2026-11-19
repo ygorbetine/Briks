@@ -212,6 +212,9 @@ pub struct H264Enc {
     pub inject: bool,
 }
 
+/// Só testes: `BRIKS_TESTES_PERIGOSOS=1` libera o que usa a GPU de verdade (codificador de hardware, conversão D3D11). Veja docs/plans/bsod-analise.md.
+pub fn testes_perigosos() -> bool { std::env::var("BRIKS_TESTES_PERIGOSOS").as_deref() == Ok("1") }
+
 /// Só testes: injeção de falhas do codificador. `FAULT_NEXT` = quantas das próximas chamadas a `encode` falham (qualquer codificador);
 /// `FAULT_HW` = `encode` de codificador de HARDWARE falha sempre (o de software passa: prova o fallback); `FAULT_HR` = HRESULT devolvido
 /// (0 = "não pediu entrada"). Zerados fora dos testes: custo de um load atômico por quadro.
@@ -240,7 +243,10 @@ impl H264Enc {
     /// `allow_hw = false`: pula o MFT de hardware (fallback depois de falhas repetidas do NVENC/GPU) e usa o de software da Microsoft ou o OpenH264.
     pub fn new_with(w: usize, h: usize, fps: f32, bps: u32, allow_hw: bool) -> Result<Self> { Self::new_with_qp(w, h, fps, bps, allow_hw, crate::mfenc::DEFAULT_MAX_QP) }
     pub fn new_with_qp(w: usize, h: usize, fps: f32, bps: u32, allow_hw: bool, max_qp: u32) -> Result<Self> {
-        let pref = std::env::var("BRIKS_ENCODER").unwrap_or_default();
+        let mut pref = std::env::var("BRIKS_ENCODER").unwrap_or_default();
+        // Só testes: sem BRIKS_TESTES_PERIGOSOS=1, nunca abre o codificador de HARDWARE (NVENC/QSV/AMF): a máquina do dono já teve tela azul
+        // com vários testes abrindo sessões de GPU ao mesmo tempo. O MFT de software da Microsoft faz o mesmo trabalho sem tocar no driver de vídeo.
+        if cfg!(test) && pref.is_empty() && !testes_perigosos() { pref = "mf-soft".into(); }
         if pref != "openh264" {
             match crate::mfenc::MfEnc::new_qp(w, h, fps.round() as u32, bps, allow_hw && pref != "mf-soft", max_qp) {
                 Ok(m) => { let (name, hardware) = (m.name.clone(), m.hardware); return Ok(H264Enc { be: Backend::Mf(m), w, h, bps, name, hardware, idr: true, nv12: vec![], inject: false }); }

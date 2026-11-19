@@ -221,7 +221,7 @@ fn bench_vpx(codec: Codec, fr: &[Yuv], w: usize, h: usize, fps: u32, bps: u32, s
 }
 
 /// Teste completo. Bloqueante (~3 s): chamar em thread própria.
-pub fn run(height: u32, fps: u32) -> Value { run_opts(height, fps, std::env::var_os("BRIKS_PROBE_NOHW").is_none()) }
+pub fn run(height: u32, fps: u32) -> Value { run_opts(height, fps, std::env::var_os("BRIKS_PROBE_NOHW").is_none() && !(cfg!(test) && !crate::video::testes_perigosos())) }   // em teste, hardware só com BRIKS_TESTES_PERIGOSOS=1
 
 /// `allow_hw = false` finge um PC sem placa (testes e diagnóstico: `BRIKS_PROBE_NOHW=1`).
 pub fn run_opts(height: u32, fps: u32, allow_hw: bool) -> Value {

@@ -351,7 +351,7 @@ async fn cycles_failed_starts() {
 #[test]
 #[ignore]
 fn cycles_mf_encoder_create_drop() {
-    let hw = std::env::var("BRIKS_MF_HW").is_ok();
+    let hw = std::env::var("BRIKS_MF_HW").is_ok() && crate::video::testes_perigosos();   // hardware só com BRIKS_TESTES_PERIGOSOS=1 (e o lock da GPU)
     let n: usize = std::env::var("BRIKS_CYCLES").ok().and_then(|v| v.parse().ok()).unwrap_or(60);
     let (w, h) = (640usize, 360usize);
     let nv12 = vec![128u8; w * h * 3 / 2];
