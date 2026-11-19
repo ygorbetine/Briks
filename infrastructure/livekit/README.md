@@ -36,3 +36,15 @@ Supabase (`ativar-sfu.ps1`); **não precisa lançar versão nova** e quem já es
 ## O que NÃO está incluído
 - TURN próprio: o Briks já recebe credenciais TURN pela função `turn-credentials` (ver `docs/ativar-turn.md`); este servidor é só SFU.
 - Vários servidores/regiões e Redis: um nó basta para o uso atual. Se um dia precisar de mais de um, o LiveKit pede Redis.
+
+## Oracle Cloud (plano grátis "Always Free")
+Dá 10 TB de saída por mês de graça, mas tem pegadinhas. Confira os limites atuais em oracle.com/br/cloud/free.
+- **A região de origem é escolhida no cadastro e não muda depois**: escolha Brasil (Vinhedo ou São Paulo).
+- Crie uma instância **Ubuntu 24.04**. As máquinas ARM grátis (Ampere A1) costumam dar "out of capacity"; tente de novo em horários
+  diferentes, ou use a AMD grátis (VM.Standard.E2.1.Micro, 1 GB: serve para poucos usuários). Converter a conta para
+  "Pay As You Go" (sem custo dentro do que é grátis) costuma liberar capacidade e evita a desativação de contas ociosas.
+- **Duas camadas de firewall**: (1) no painel, em Rede > Lista de segurança (Security List) da sua sub-rede, adicione regras de
+  entrada para 80, 443, 7881/tcp e 50000–60000/udp; (2) dentro da máquina, o `instalar.sh` já detecta as regras do iptables da
+  imagem da Oracle e libera as portas lá também. Esquecer a camada 1 é o erro mais comum: tudo parece ok e nada conecta.
+- Dê ao IP público da instância o tipo **reservado**, para ele não mudar se a máquina for recriada.
+- Mantenha a máquina com algum uso: a Oracle pode recolher instâncias grátis que ficam ociosas por muito tempo.

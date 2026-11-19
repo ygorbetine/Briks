@@ -85,6 +85,16 @@ ufw allow "${SSH_PORT}/tcp" >/dev/null     # nunca se trancar para fora
 ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null            # HTTPS (certificado e conexao do app)
 ufw allow 7881/tcp >/dev/null; ufw allow 50000:60000/udp >/dev/null  # midia WebRTC (TCP de reserva e UDP)
 ufw --force enable >/dev/null
+# Oracle Cloud (e algumas outras): a imagem Ubuntu traz regras do iptables que recusam tudo, ANTES das do ufw. Sem isto as portas
+# parecem abertas e nada chega. Insere as liberacoes no topo e grava para sobreviver ao reinicio.
+if iptables -S INPUT 2>/dev/null | grep -q 'icmp-host-prohibited'; then
+  echo "Regras de iptables do provedor detectadas (estilo Oracle): liberando as portas la tambem."
+  for r in "tcp --dport 80" "tcp --dport 443" "tcp --dport 7881" "udp --dport 50000:60000"; do
+    iptables -C INPUT -p ${r% --dport*} -m ${r%% *} --dport ${r##* } -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -p ${r% --dport*} -m ${r%% *} --dport ${r##* } -j ACCEPT
+  done
+  apt-get install -y iptables-persistent netfilter-persistent >/dev/null 2>&1 || true
+  netfilter-persistent save >/dev/null 2>&1 || iptables-save > /etc/iptables/rules.v4
+fi
 echo "Portas abertas aqui: ssh($SSH_PORT) 80 443 7881/tcp 50000-60000/udp."
 echo "ATENCAO: se a VPS tem OUTRO firewall no painel do provedor (Oracle, AWS, Azure...), abra as mesmas portas la tambem."
 
