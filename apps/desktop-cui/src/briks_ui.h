@@ -32,7 +32,7 @@ typedef enum { SCREEN_AUTH, SCREEN_SOCIAL, SCREEN_CALL, SCREEN_HISTORY } screen_
 
 #define MAX_FRIENDS 128
 #define MAX_COMMUNITIES 32
-typedef struct { char id[48]; char name[96]; char request_id[48]; char status[64]; char presence[64]; char nick[32]; char fp[72]; char jwk[260]; } person_t;   /* status = texto do balão; presence = o que a pessoa está usando */
+typedef struct { char id[48]; char name[96]; char request_id[48]; char status[96]; char presence[64]; char nick[32]; char fp[72]; char jwk[260]; } person_t;   /* status = texto do balão; presence = o que a pessoa está usando */
 typedef struct { char id[48]; char name[96]; int members; } community_t;
 
 #define MAX_GROUPS 32
@@ -111,7 +111,7 @@ typedef struct {
     char user_id[48], user_name[96], user_email[96];
     cui_texture user_photo;                    /* foto de perfil (0 = só iniciais) */
     char user_nick[32];                        /* @nick da conta (sem o @): o escolhido, ou um provisório derivado do nome; nunca do e-mail */
-    char user_status[64], user_presence[64];   /* status (balão) e rich presence (programa em uso); status vazio = mostra a presença */
+    char user_status[96], user_presence[64];   /* status (balão) e rich presence (programa em uso); status vazio = mostra a presença */
     bool rp_enabled; int rp_audience;           /* rich presence ligado; 0 = todos os amigos, 1 = só quem está na mesma chamada */
     person_t friends[MAX_FRIENDS]; int friend_count;
     person_t pending[MAX_FRIENDS]; int pending_count;
@@ -154,7 +154,7 @@ typedef struct {
     bool rtc_want_room, rtc_session_sent, rtc_session_ready, in_room;
     int rtc_peer_count, rtc_authed_count;
     int rtc_overflow;              /* participantes além de BRIKS_MAX_PEERS: estão na chamada (o áudio toca), mas sem quadro: a grade mostra "+N" */
-    struct { char id[48]; char state[16]; float level; bool mic_off, deafened, muted_by_me; float volume; bool vol_set; char fp[72], name[64], status[64], presence[64]; } rtc_peers[BRIKS_MAX_PEERS];
+    struct { char id[48]; char state[16]; float level; bool mic_off, deafened, muted_by_me; float volume; bool vol_set; char fp[72], name[64], status[96], presence[64]; } rtc_peers[BRIKS_MAX_PEERS];
     float me_level;                /* nível de fala do microfone local (0..1), evento "speaking" do core */
     bool rtc_owner_me;             /* sou o dono da sala (evento room.owner): só o dono vê "Expulsar" */
     int kick_slot;                 /* peer pendente de confirmação de expulsão (-1 = nenhum) */
@@ -372,6 +372,8 @@ void profile_tick(app_state_t *s);
 void friends_notify_tick(app_state_t *s);                       /* detecta amigo que ficou online / entrou na chamada */
 void friends_notify_banner(cui_ctx *ui, app_state_t *s);        /* faixa de aviso (some sozinha em ~7 s) */
 bool friends_online(const app_state_t *s, const person_t *p);   /* online de verdade (batimento) ou na sua chamada agora */
+size_t profile_clean_text(char *t, size_t max_chars);   /* texto de usuário (status): UTF-8 válido, sem controles/quebras/bidi, espaços colapsados, até max_chars caracteres; devolve os caracteres que sobraram */
+#define STATUS_MAX_CHARS 64                                      /* limite do status (o servidor e o core cortam em 64) */
 void account_presence_tick(app_state_t *s);                      /* batimento de ~60 s (account.c) */                              /* perfil local: presença do programa em uso, persistência (profile.c) */
 void rtc_set_mic(app_state_t *s, bool on);
 void rtc_set_deaf(app_state_t *s, bool on);

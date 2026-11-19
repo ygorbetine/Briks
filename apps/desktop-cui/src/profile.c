@@ -22,6 +22,30 @@ static bool profile_path(char *out, size_t cap) {
     return true;
 }
 
+/* Limpa texto digitado/recebido (status). Mantém só UTF-8 válido, tira controles C0/C1, quebras de linha/parágrafo, marcas invisíveis e de
+ * direção (bidi), colapsa espaços e apara as pontas; corta em max_chars caracteres. Devolve quantos caracteres ficaram. */
+size_t profile_clean_text(char *t, size_t max_chars) {
+    unsigned char *in = (unsigned char *)t, *out = (unsigned char *)t; size_t chars = 0; bool pend_space = false;
+    while (*in) {
+        unsigned cp; int len;
+        if (in[0] < 0x80) { cp = in[0]; len = 1; }
+        else if ((in[0] & 0xE0) == 0xC0 && (in[1] & 0xC0) == 0x80) { cp = ((in[0] & 0x1Fu) << 6) | (in[1] & 0x3Fu); len = 2; if (cp < 0x80) { in++; continue; } }
+        else if ((in[0] & 0xF0) == 0xE0 && (in[1] & 0xC0) == 0x80 && (in[2] & 0xC0) == 0x80) { cp = ((in[0] & 0x0Fu) << 12) | ((in[1] & 0x3Fu) << 6) | (in[2] & 0x3Fu); len = 3; if (cp < 0x800 || (cp >= 0xD800 && cp < 0xE000)) { in++; continue; } }
+        else if ((in[0] & 0xF8) == 0xF0 && (in[1] & 0xC0) == 0x80 && (in[2] & 0xC0) == 0x80 && (in[3] & 0xC0) == 0x80) { cp = ((in[0] & 0x07u) << 18) | ((in[1] & 0x3Fu) << 12) | ((in[2] & 0x3Fu) << 6) | (in[3] & 0x3Fu); len = 4; if (cp < 0x10000 || cp > 0x10FFFF) { in++; continue; } }
+        else { in++; continue; }   /* byte solto/inválido */
+        in += len;
+        const bool space = cp == ' ' || cp == 0x09 || cp == 0x0A || cp == 0x0D || cp == 0xA0 || cp == 0x2028 || cp == 0x2029 || cp == 0x3000;
+        if (space) { pend_space = true; continue; }
+        if (cp < 0x20 || cp == 0x7F || (cp >= 0x80 && cp < 0xA0) || (cp >= 0x200B && cp <= 0x200F) || (cp >= 0x202A && cp <= 0x202E) || (cp >= 0x2060 && cp <= 0x2069) || cp == 0xFEFF || cp == 0xFFFD) continue;
+        if (chars >= max_chars) break;
+        if (pend_space && chars) { if (chars + 1 >= max_chars) break; *out++ = ' '; chars++; }
+        pend_space = false;
+        memmove(out, in - len, (size_t)len); out += len; chars++;
+    }
+    *out = 0;
+    return chars;
+}
+
 /* "limpar depois de": 0 não limpar, 1 hora, 2 4 horas, 3 hoje (até a meia-noite local); devolve o epoch de expiração (0 = nunca) */
 long long profile_expiry_for(int clear, long long now) {
     if (clear == 1) return now + 3600;
@@ -54,7 +78,7 @@ static void profile_load(app_state_t *s) {
     FILE *f = fopen(p, "rb"); if (!f) return;
     static char buf[4096]; size_t n = fread(buf, 1, sizeof buf - 1, f); buf[n] = 0; fclose(f);
     jval *j = json_parse(buf); if (!j) return;
-    snprintf(s->user_status, sizeof s->user_status, "%s", json_str(j, "status", ""));
+    snprintf(s->user_status, sizeof s->user_status, "%s", json_str(j, "status", "")); profile_clean_text(s->user_status, STATUS_MAX_CHARS);
     const jval *rp = json_get(j, "rich_presence"), *au = json_get(j, "audience");
     s->rp_enabled = rp && rp->type == J_BOOL && rp->b;
     s->rp_audience = au && au->type == J_NUM && au->num >= 1 ? 1 : 0;
@@ -128,7 +152,7 @@ void profile_tick(app_state_t *s) {
         if (foreground_text(s, t, sizeof t) && strcmp(t, s->user_presence)) { snprintf(s->user_presence, sizeof s->user_presence, "%s", t); cui_request_redraw(cui_app_ui(s->app)); }
     }
     if (!s->rp_enabled && s->user_presence[0] && !demo) s->user_presence[0] = 0;
-    static char saved_status[64], saved_emoji[16], saved_ign[6 * 32 + 8]; static bool saved_rp, saved_inv, saved_notify; static int saved_aud = -1, saved_clear;
+    static char saved_status[96], saved_emoji[16], saved_ign[6 * 32 + 8]; static bool saved_rp, saved_inv, saved_notify; static int saved_aud = -1, saved_clear;
     char ign[6 * 32 + 8] = ""; for (int i = 0; i < s->rp_ignore_n; i++) { strncat(ign, s->rp_ignore[i], 31); strcat(ign, "|"); }
     if (saved_aud < 0) {
         snprintf(saved_status, sizeof saved_status, "%s", s->user_status); snprintf(saved_emoji, sizeof saved_emoji, "%s", s->user_emoji); snprintf(saved_ign, sizeof saved_ign, "%s", ign);

@@ -1,0 +1,9 @@
+# Status personalizado: aba Status do perfil, sugestoes, contador e digitar (demo social)
+tap 413 755
+mtap 340 352
+snap st0
+mtap 800 297
+type Estou testando o status
+snap st1
+mtap 810 372
+snap st2

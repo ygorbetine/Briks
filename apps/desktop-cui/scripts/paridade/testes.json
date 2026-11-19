@@ -26,6 +26,9 @@
       { "item": ["PRF-08", "PRF-09"], "de": "p3", "para": "p4", "esperado": "muda" },
       { "item": "PRF-10", "de": "p4", "para": "p5", "esperado": "muda" },
       { "item": "AUT-13", "de": "p5", "para": "p6", "esperado": "muda" } ] },
+    { "id": "perfil-status", "demo": "social", "roteiro": "perfil-status.txt", "checagens": [
+      { "item": ["PRF-04", "PRF-05"], "de": "st0", "para": "st1", "esperado": "muda" },
+      { "item": "PRF-05", "de": "st1", "para": "st2", "esperado": "muda" } ] },
     { "id": "config-abas", "demo": "social", "roteiro": "config-abas.txt", "checagens": [
       { "item": "CFG-01", "de": "k0", "para": "k1", "esperado": "muda" },
       { "item": ["CFG-02", "RDE-05"], "de": "k1", "para": "k2", "esperado": "muda" },

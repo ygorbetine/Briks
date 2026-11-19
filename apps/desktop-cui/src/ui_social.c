@@ -10,6 +10,7 @@
 #include "update.h"
 #include "sysint.h"
 #include "ginvite.h"
+#include "dmcall.h"
 #include <stdio.h>
 #include <string.h>
 #include <windows.h>
@@ -356,6 +357,7 @@ static void navigation(cui_ctx *ui, app_state_t *s) {
                     }
                 }
                 if (!f_compact && briks_clicked(ui, "ident")) { s->profile_open = true; s->profile_tab = 1; }   /* clicar no status: abre Perfil e conta na aba Status */
+                if (nudge_dnd_active() && foot_icon(ui, "ft-dnd", CUI_ICON_MOON, "Não perturbar ligado (clique para desligar)")) nudge_dnd_set(0, false);
                 if (foot_icon(ui, "ft-at", CUI_ICON_AT_SIGN, "Perfil e conta")) { s->profile_open = true; s->profile_tab = 3; }
                 if (foot_icon(ui, "ft-cfg", CUI_ICON_SETTINGS, "Configurações")) s->settings_open = true;
                 if (foot_icon(ui, "ft-out", CUI_ICON_LOG_OUT, NULL)) app_logout(s);
@@ -489,8 +491,10 @@ static void content(cui_ctx *ui, app_state_t *s) {
             if (group) groups_header(ui, s);
             if (!group) briks_status_pill(ui, s->friends[s->active_friend].status);   /* só se o amigo tiver status */
             { const char *ty = attach_typing_label(s); if (ty) cui_text(ui, ty, .size = 12, .color = B_C3, .nowrap = true); }
+            if (!group) dmcall_button(ui, s);   /* Ligar: chamada individual */
             msgui_pinned_button(ui, s);
             attach_search_button(ui);
+            if (!group && cui_icon_button(ui, CUI_ICON_BELL, .tooltip = "Chamar atenção (faz a tela dele tremer)")) nudge_send(s, s->active_friend);
         }
         cui_separator(ui);
         friends_notify_banner(ui, s);
@@ -627,8 +631,8 @@ static void nick_text(const app_state_t *s, char *out, size_t cap) {
 static char *g_st_buf; static size_t g_st_cap;
 static void status_text_cb(const char *e, void *u) { (void)u; size_t n = strlen(g_st_buf), k = strlen(e); if (n + k < g_st_cap) memcpy(g_st_buf + n, e, k + 1); }   /* o emoji escolhido entra no texto do status */
 static void profile_dialog(cui_ctx *ui, app_state_t *s) {
-    static char st_draft[64], name_draft[64], ig_add[32]; static bool was_open;
-    static const char *CHIPS[] = { "Jogando", "Estudando", "Trabalhando", "Ouvindo música", "Ausente" };
+    static char st_draft[96], name_draft[64], ig_add[32]; static bool was_open;
+    static const char *CHIPS[] = { "Jogando", "Estudando", "Ocupado", "Volto já", "Ouvindo música", "Ausente" };
     static const char *CLEAR[] = { "Não limpar", "1 hora", "4 horas", "Hoje" };   /* mesmas opções do Electron (StatusEditor) */
     /* a fonte do app não traz emoji colorido: o seletor usa os ícones do CUI (UI pronta; emoji de verdade depende de fonte) */
     if (s->profile_open && !was_open) {
@@ -690,8 +694,10 @@ static void profile_dialog(cui_ctx *ui, app_state_t *s) {
                             if (briks_clicked_r(ui, "pf-emo", 12.0f) && !msgui_emoji_picking()) { const cui_rect er = cui_get_rect(ui, cui_make_id(ui, "pf-emo")); g_st_buf = st_draft; g_st_cap = sizeof st_draft; msgui_emoji_pick(er.x, er.y + er.h + 6.0f, status_text_cb, s); }   /* o MESMO seletor completo do chat (msgui.c) */
                             cui_input(ui, "pf-status", st_draft, sizeof st_draft, .placeholder = "O que está pensando?", .width = CUI_FILL);
                         }
+                        { size_t nch = 0; for (const unsigned char *c = (const unsigned char *)st_draft; *c; c++) if ((*c & 0xC0) != 0x80) nch++;   /* contador em caracteres, não bytes */
+                          char cnt[24]; snprintf(cnt, sizeof cnt, "%zu/%d", nch, STATUS_MAX_CHARS); cui_text(ui, cnt, .size = 11, .color = nch > STATUS_MAX_CHARS ? B_DANGER : B_MUTED); }
                         cui_row(ui, .gap = 6, .width = CUI_FILL, .wrap = true) {
-                            for (int i = 0; i < 5; i++) {
+                            for (int i = 0; i < 6; i++) {
                                 cui_push_id_int(ui, 4100 + i);
                                 bool sel = !strcmp(st_draft, CHIPS[i]);
                                 if (cui_chip(ui, CHIPS[i], &sel)) snprintf(st_draft, sizeof st_draft, "%s", sel ? CHIPS[i] : "");
@@ -702,7 +708,7 @@ static void profile_dialog(cui_ctx *ui, app_state_t *s) {
                         cui_segmented(ui, "pf-clear", CLEAR, 4, &s->status_clear, .full_width = true, .size = CUI_SIZE_SM);
                         cui_row(ui, .gap = 8, .width = CUI_FILL, .justify = CUI_JUSTIFY_END) {
                             if (cui_button(ui, "Limpar", .variant = CUI_BUTTON_SECONDARY)) { st_draft[0] = 0; s->user_emoji[0] = 0; s->user_status[0] = 0; }
-                            if (cui_button(ui, "Salvar status", .variant = CUI_BUTTON_PRIMARY)) snprintf(s->user_status, sizeof s->user_status, "%s", st_draft);
+                            if (cui_button(ui, "Salvar status", .variant = CUI_BUTTON_PRIMARY)) { profile_clean_text(st_draft, STATUS_MAX_CHARS); snprintf(s->user_status, sizeof s->user_status, "%s", st_draft); }
                         }
                     }
                     break;

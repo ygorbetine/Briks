@@ -160,7 +160,7 @@ void account_friends_poll(app_state_t *s) {
 /* 1.4.3 (0012): o status personalizado sobe para a conta quando muda (e uma vez ao entrar), com a validade que sobrou; os amigos o recebem na lista.
  * Sem a migração no servidor o core cai na função antiga (só o texto) ou devolve server_not_ready: o balão local e o da chamada continuam. */
 void account_status_sync(app_state_t *s) {
-    static char who[48], sent_st[72], sent_em[16]; static long long sent_exp; static bool sent;
+    static char who[48], sent_st[100], sent_em[16]; static long long sent_exp; static bool sent;
     if (core_state() != CORE_READY || !s->acct_user_id[0] || s->acct_demo || getenv("BRIKS_DEMO_STATUS") || getenv("BRIKS_DEMO")) { who[0] = 0; sent = false; return; }
     const bool entered = strcmp(who, s->acct_user_id) != 0;
     if (!entered && sent && !strcmp(sent_st, s->user_status) && !strcmp(sent_em, s->user_emoji) && sent_exp == s->status_expires) return;
@@ -485,7 +485,8 @@ static void on_friends(app_state_t *s, const jval *j) {
         copy(d->request_id, sizeof d->request_id, json_str(p, "request_id", ""));
         copy(d->nick, sizeof d->nick, json_str(p, "nick", ""));
         { const char *st = json_str(p, "status", ""), *em = json_str(p, "status_emoji", "");   /* 1.4.3: status personalizado = emoji + texto (0012) */
-          if (st[0] && em[0]) snprintf(d->status, sizeof d->status, "%s %s", em, st); else copy(d->status, sizeof d->status, st); }
+          if (st[0] && em[0]) snprintf(d->status, sizeof d->status, "%s %s", em, st); else copy(d->status, sizeof d->status, st);
+          profile_clean_text(d->status, STATUS_MAX_CHARS + 10); }   /* texto vindo do servidor: tratado como não confiável */
         copy(d->fp, sizeof d->fp, json_str(p, "fingerprint", ""));
         const jval *pk = json_get(p, "public_key");
         if (pk && json_str(pk, "x", "")[0] && json_str(pk, "y", "")[0]) snprintf(d->jwk, sizeof d->jwk, "{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\"%s\",\"y\":\"%s\"}", json_str(pk, "x", ""), json_str(pk, "y", ""));

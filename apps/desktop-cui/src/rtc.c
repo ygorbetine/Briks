@@ -191,7 +191,7 @@ void rtc_set_deaf(app_state_t *s, bool on) { (void)s; if (g_sys.deaf != on) { g_
 
 /* Quem não coube na grade (mais de BRIKS_MAX_PEERS remotos): só os ids, para o "+N" contar certo quando entram e saem. */
 /* Guarda também nome, impressão digital e estado: quando abre vaga na grade, o primeiro da fila sobe já completo. */
-typedef struct { char id[48], state[16], fp[72], name[64], status[64], presence[64]; bool mic_off, deafened; unsigned long order; } over_t;
+typedef struct { char id[48], state[16], fp[72], name[64], status[96], presence[64]; bool mic_off, deafened; unsigned long order; } over_t;
 static over_t g_over[256];
 static unsigned long g_over_seq;
 static void over_clear(app_state_t *s) { memset(g_over, 0, sizeof g_over); s->rtc_overflow = 0; }
@@ -209,7 +209,7 @@ static void over_note(const jval *j, const char *ev) {
     if (!strcmp(ev, "peer.info")) { copy(o->fp, sizeof o->fp, json_str(j, "fp", "")); copy(o->name, sizeof o->name, json_str(j, "name", "")); return; }
     const jval *m = json_get(j, "microphone"), *d = json_get(j, "deafened");
     o->mic_off = m && m->type == J_BOOL && !m->b; o->deafened = d && d->type == J_BOOL && d->b;
-    copy(o->status, sizeof o->status, json_str(j, "status", "")); copy(o->presence, sizeof o->presence, json_str(j, "presence", ""));
+    copy(o->status, sizeof o->status, json_str(j, "status", "")); profile_clean_text(o->status, STATUS_MAX_CHARS + 10); copy(o->presence, sizeof o->presence, json_str(j, "presence", ""));
 }
 /* Abriu vaga na grade: sobe quem espera há mais tempo. */
 static void over_promote(app_state_t *s) {
@@ -313,7 +313,7 @@ bool rtc_handle_event(app_state_t *s, const char *line) {
         for (int i = 0; i < BRIKS_MAX_PEERS; i++) if (s->rtc_peers[i].id[0] && !strcmp(s->rtc_peers[i].id, p)) {
             s->rtc_peers[i].mic_off = m && m->type == J_BOOL && !m->b;
             s->rtc_peers[i].deafened = d && d->type == J_BOOL && d->b;
-            copy(s->rtc_peers[i].status, sizeof s->rtc_peers[i].status, json_str(j, "status", ""));
+            copy(s->rtc_peers[i].status, sizeof s->rtc_peers[i].status, json_str(j, "status", "")); profile_clean_text(s->rtc_peers[i].status, STATUS_MAX_CHARS + 10);   /* texto de outro usuário */
             copy(s->rtc_peers[i].presence, sizeof s->rtc_peers[i].presence, json_str(j, "presence", ""));
         }
     } else if (!strcmp(ev, "hello.ok")) {   /* o core diz o nível do protocolo: abaixo do exigido é um core de outra versão (órfão ou briks-core.exe velho) */
@@ -491,12 +491,12 @@ void rtc_pump(app_state_t *s) {
             }
         }
         {   /* status e presença (programa em uso, se ligado) seguem para o core; ele anuncia aos peers autenticados da sala */
-            static char sent_st[96], sent_pr[64]; static bool sent_once;
+            static char sent_st[128], sent_pr[64]; static bool sent_once;
             const char *pr = s->rp_enabled ? s->user_presence : "";
-            char comp[96]; if (s->user_status[0] && s->user_emoji[0]) snprintf(comp, sizeof comp, "%s %s", s->user_emoji, s->user_status); else copy(comp, sizeof comp, s->user_status);   /* o emoji viaja junto do texto */
+            char comp[128]; if (s->user_status[0] && s->user_emoji[0]) snprintf(comp, sizeof comp, "%s %s", s->user_emoji, s->user_status); else copy(comp, sizeof comp, s->user_status);   /* o emoji viaja junto do texto */
             if (!sent_once || strcmp(sent_st, comp) || strcmp(sent_pr, pr)) {
                 sent_once = true; copy(sent_st, sizeof sent_st, comp); copy(sent_pr, sizeof sent_pr, pr);
-                char extra[360], a[200], b[140]; json_escape(comp, a, sizeof a); json_escape(pr, b, sizeof b);
+                char extra[460], a[300], b[140]; json_escape(comp, a, sizeof a); json_escape(pr, b, sizeof b);
                 snprintf(extra, sizeof extra, "\"status\":\"%s\",\"presence\":\"%s\"", a, b);
                 send_cmd("profile.set", extra);
             }

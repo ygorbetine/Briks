@@ -9,6 +9,16 @@ int main(void) {
     CHECK(profile_expiry_for(0, now) == 0 && profile_expiry_for(1, now) == now + 3600 && profile_expiry_for(2, now) == now + 4 * 3600);
     long long today = profile_expiry_for(3, now);
     CHECK(today > now && today <= now + 86400 + 3600);
+    /* texto de usuário: sem controles, quebras, bidi, UTF-8 inválido; espaços colapsados; limite em caracteres */
+    { char t[128];
+      snprintf(t, sizeof t, "  Jogando\r\n  Valorant\t\x01\x7f  "); profile_clean_text(t, 64); CHECK(!strcmp(t, "Jogando Valorant"));
+      snprintf(t, sizeof t, "a\xE2\x80\xAE" "b\xE2\x80\x8B" "c"); profile_clean_text(t, 64); CHECK(!strcmp(t, "abc"));   /* bidi override e zero-width */
+      snprintf(t, sizeof t, "ol\xC3\xA1 \xFF\xC3"); profile_clean_text(t, 64); CHECK(!strcmp(t, "ol\xC3\xA1"));            /* byte solto e UTF-8 truncado */
+      snprintf(t, sizeof t, "\"quoted\" \\ ok"); CHECK(profile_clean_text(t, 64) == 13 && !strcmp(t, "\"quoted\" \\ ok"));   /* aspas/barra ficam (o JSON escapa) */
+      memset(t, 'x', 100); t[100] = 0; CHECK(profile_clean_text(t, 64) == 64 && strlen(t) == 64);
+      snprintf(t, sizeof t, "\xC3\xA1\xC3\xA1\xC3\xA1"); CHECK(profile_clean_text(t, 2) == 2 && !strcmp(t, "\xC3\xA1\xC3\xA1"));   /* corta por caractere, não por byte */
+      snprintf(t, sizeof t, " \n\t "); CHECK(profile_clean_text(t, 64) == 0 && !t[0]);
+      char e[200]; snprintf(t, sizeof t, "a\"b\\c"); json_escape(t, e, sizeof e); CHECK(!strcmp(e, "a\\\"b\\\\c")); }
     /* ignorar */
     snprintf(s.rp_ignore[0], sizeof s.rp_ignore[0], "Spotify"); s.rp_ignore_n = 1;
     CHECK(profile_ignored(&s, "spotify", NULL) && profile_ignored(&s, "SPOTIFY", "x") && !profile_ignored(&s, "chrome", "Usando Google Chrome"));
