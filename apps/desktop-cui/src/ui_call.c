@@ -20,7 +20,7 @@ static int g_sheen_seen;   /* roteiros: quadros em que o brilho foi desenhado no
 
 static app_state_t *g_tile_s;   /* estado para o menu do bloco (slider de volume por pessoa) */
 typedef struct { const char *name; bool me, muted; float level; int slot; bool by_me, can_kick, live; const char *status; const char *badge; cui_texture vtex; int vw, vh; bool deaf; cui_texture ptex; } tile_t;   /* ptex: foto de perfil (0 = iniciais) */
-enum { TILE_NONE = 0, TILE_MUTE, TILE_KICK, TILE_FOCUS, TILE_ASK, TILE_WATCH, TILE_ROOM_MUTE, TILE_REPORT };
+enum { TILE_NONE = 0, TILE_MUTE, TILE_KICK, TILE_FOCUS, TILE_ASK, TILE_WATCH, TILE_ROOM_MUTE, TILE_REPORT, TILE_UNWATCH };
 #define SLOT_ME (BRIKS_MAX_PEERS + 1)
 static bool g_can_room_mute;   /* sou o dono e a chamada está no servidor de chamadas: posso silenciar alguém para todos */
 static struct { float lvl, d; } g_av[BRIKS_MAX_PEERS + 2];   /* nível de fala e diâmetro do avatar por tile (0..7 peers, 8 prévia, 9 eu), lidos pelo canvas ao pintar */
@@ -310,7 +310,13 @@ static int tile(cui_ctx *ui, const tile_t *t, float w, float h, bool mic_on) {
                     /* só o dono, só no servidor de chamadas: fecha (ou pede para reabrir) o microfone da pessoa para todos */
                     if (g_can_room_mute && t->can_kick && cui_menu_item(ui, t->muted ? "Reabrir o microfone dele" : "Silenciar para todos", .icon = CUI_ICON_VOLUME_X)) act = TILE_ROOM_MUTE;
                     if (cui_menu_item(ui, "Destacar (modo Foco)", .icon = CUI_ICON_MAXIMIZE_2)) act = TILE_FOCUS;
-                    if (t->live) { if (cui_menu_item(ui, "Ver a transmissão", .icon = CUI_ICON_MONITOR)) act = TILE_WATCH; }
+                    if (t->live) {
+                        if (cui_menu_item(ui, "Ver a transmissão", .icon = CUI_ICON_MONITOR)) act = TILE_WATCH;
+                        if (g_tile_s && t->slot >= 0 && t->slot < BRIKS_MAX_PEERS) {   /* 1.6: liga/desliga a transmissão dele só para mim (sem baixar nem decodificar: poupa o computador) */
+                            const bool off = safety_hidden(g_tile_s, t->slot);
+                            if (cui_menu_item(ui, off ? "Voltar a ver a transmissão" : "Parar de ver a transmissão", .icon = CUI_ICON_EYE_OFF)) act = off ? TILE_WATCH : TILE_UNWATCH;
+                        }
+                    }
                     else if (cui_menu_item(ui, "Pedir transmissão", .icon = CUI_ICON_MONITOR)) act = TILE_ASK;
                     if (!t->me) { cui_menu_separator(ui); if (cui_menu_item(ui, "Denunciar…", .icon = CUI_ICON_FLAG, .danger = true)) act = TILE_REPORT; }
                     if (t->can_kick) {
@@ -321,7 +327,7 @@ static int tile(cui_ctx *ui, const tile_t *t, float w, float h, bool mic_on) {
                 if (act != TILE_NONE) cui_popover_close(ui, "pmenu");
             }
             /* clique no corpo do bloco (fora do rótulo): destaca no modo Foco */
-            if (act == TILE_NONE && !briks_blocked() && !briks_covered(ui) && cui_mouse_clicked(ui, CUI_MOUSE_LEFT) && in_rect(tr, mp) && !in_rect(lr, mp)) act = TILE_FOCUS;
+            if (act == TILE_NONE && !briks_blocked() && !briks_covered(ui) && cui_mouse_clicked(ui, CUI_MOUSE_LEFT) && in_rect(tr, mp) && !in_rect(lr, mp)) act = t->live ? TILE_WATCH : TILE_FOCUS;   /* quem transmite: clicar no bloco abre a aba Transmissão (Foco fica no menu) */
         }
     }
     return act;
@@ -669,7 +675,8 @@ static void do_tile(cui_ctx *ui, app_state_t *s, const tile_t *t, float w, float
         else if (act == TILE_ROOM_MUTE) rtc_room_mute(s, i, !s->rtc_peers[i].mic_off);
         else if (act == TILE_KICK) { s->kick_slot = i; s->kick_open = true; }
         else if (act == TILE_REPORT) safety_report_open(i);
-        else if (act == TILE_WATCH) s->call_mode = 1;
+        else if (act == TILE_WATCH) { safety_reveal(s, i); s->call_mode = 1; s->call_view = 0; share_focus_peer(i); }
+        else if (act == TILE_UNWATCH) safety_hide(s, i, true);
         else if (act == TILE_ASK) {
             rtc_stream_request(s, i);
             char m[160]; snprintf(m, sizeof m, "Pedido de transmissão enviado a %s.", s->rtc_peers[i].name[0] ? s->rtc_peers[i].name : "essa pessoa"); call_toast(m);

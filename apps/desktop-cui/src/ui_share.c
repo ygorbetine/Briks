@@ -641,7 +641,7 @@ void share_tick(cui_ctx *ui, app_state_t *s) {
             if (q->remote2[i].on || q->remote2[i].watching) { memset(&q->remote2[i], 0, sizeof q->remote2[i]); fv_close(&g_fv[FV2(i)]); memset(&g_zoom[FV2(i)], 0, sizeof g_zoom[0]); }
             continue;
         }
-        bool want2 = (viewing || overlay_live_wanted(i, true) || mini_wants(i, true)) && q->remote2[i].on;
+        bool want2 = (viewing || overlay_live_wanted(i, true) || mini_wants(i, true)) && q->remote2[i].on && !safety_covered(s, i);   /* "Parar de ver": nem decodifica */
         if (want2 != q->remote2[i].watching) {
             char line[220], id[96]; json_escape(s->rtc_peers[i].id, id, sizeof id);
             snprintf(line, sizeof line, "{\"cmd\":\"share.watch\",\"slot\":1,\"peer\":\"%s\",\"on\":%s}", id, want2 ? "true" : "false");
@@ -649,7 +649,7 @@ void share_tick(cui_ctx *ui, app_state_t *s) {
             q->remote2[i].watching = want2;
             if (!want2) { q->remote2[i].has_frame = false; fv_close(&g_fv[FV2(i)]); }
         }
-        bool want = (viewing || overlay_live_wanted(i, false) || mini_wants(i, false) || g_thumb_prev[i]) && q->remote[i].on;   /* a miniatura do overlay (jogo na frente) também pede o decodificador */
+        bool want = (viewing || overlay_live_wanted(i, false) || mini_wants(i, false) || g_thumb_prev[i]) && q->remote[i].on && !safety_covered(s, i);   /* a miniatura do overlay (jogo na frente) também pede o decodificador */
         if (want != q->remote[i].watching) {
             char line[200], id[96]; json_escape(s->rtc_peers[i].id, id, sizeof id);
             snprintf(line, sizeof line, "{\"cmd\":\"share.watch\",\"peer\":\"%s\",\"on\":%s}", id, want ? "true" : "false");
@@ -1228,6 +1228,7 @@ void share_peer_gone(app_state_t *s, int slot) {
     if (g_notice.slot == slot) g_notice.slot = -1;
     if (g_sfocus == slot || g_sfocus == FV2(slot)) g_sfocus = -1;
 }
+void share_focus_peer(int slot) { if (slot >= 0 && slot < BRIKS_MAX_PEERS) g_sfocus = slot; }   /* clicar no bloco de quem transmite: abre essa transmissão em destaque no Foco */
 static bool g_prev_note_off;   /* o usuário dispensou o aviso da prévia (vale até fechar o app) */
 static cui_rect g_trect[16];   /* retângulos das transmissões do último quadro */
 static bool g_tg_press, g_tg_release, g_tile_grid, g_tg_down; static cui_vec2 g_tg_at; static int g_tg_key = -1, g_tile_opens;   /* clique no bloco da Grade abre em Foco */
@@ -1278,6 +1279,7 @@ static bool video_tile(cui_ctx *ui, int key, cui_texture tex, int tw, int th, co
                     cui_icon(ui, hid ? CUI_ICON_EYE_OFF : CUI_ICON_SHIELD, compact ? 18 : 34, B_C3);
                     if (!compact) {
                         cui_text(ui, hid ? "Você parou de ver esta transmissão." : "Transmissão escondida.", .size = 14, .color = B_MUTED);
+                        if (hid) cui_text(ui, "O Briks não baixa nem mostra a imagem enquanto isso.", .size = 12, .color = B_MUTED);
                     }
                     if (cui_button(ui, hid ? "Voltar a ver" : "Mostrar", .variant = CUI_BUTTON_SECONDARY, .size = CUI_SIZE_SM)) safety_reveal(g_vt_s, sgp);
                 }

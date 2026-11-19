@@ -406,6 +406,7 @@ bool share_notice_active(cui_ctx *ui, app_state_t *s);       /* há aviso "X com
 void ui_share_notice_row(cui_ctx *ui, app_state_t *s);        /* a linha do aviso, com o botão Assistir */
 bool ui_share_stage(cui_ctx *ui, app_state_t *s, float W, float H, int layout);             /* palco do modo Transmissão; false = ninguém transmitindo */
 bool share_peer_live(const app_state_t *s, int slot);
+void share_focus_peer(int slot);                         /* abre a transmissão dessa pessoa em destaque (modo Foco) */
 /* olhinho de quem transmite: true = há dado para a tela `sl` (0/1) da pessoa no slot; devolve a contagem e o tooltip com nomes */
 bool share_peer_eye(const app_state_t *s, int slot, int sl, int *count, char *tip, size_t cap);
 void share_peer_gone(app_state_t *s, int slot);   /* a pessoa saiu da chamada: some o que ela transmitia (tela nos dois slots) e a última imagem */
