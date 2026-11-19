@@ -646,9 +646,9 @@ void share_tick(cui_ctx *ui, app_state_t *s) {
     }
     for (int i = 0; i < g_ntrash; i++) cui_image_destroy(ui, g_trash[i]);
     g_ntrash = 0;
-    if (!q->fps && !q->res && !q->br_custom) { q->res = RES_1080; q->fps = FPS_DEFAULT; q->br_custom = 8; }
+    if (!q->fps && !q->res && !q->br_custom) { q->res = RES_720; q->fps = FPS_DEFAULT; q->br_custom = 4; }
     if (q->fps < 0 || q->fps >= FPS_N) q->fps = FPS_DEFAULT;
-    if (q->res < 0 || q->res >= RES_N) q->res = RES_1080;   /* padrão: 1080p · 30 FPS · automático */
+    if (q->res < 0 || q->res >= RES_N) q->res = RES_720;   /* padrão (1.6.1): 720p · 30 FPS · automático: gasta menos banda do servidor */
     /* só assiste no modo Transmissão (aba Chamada): fora dele o core nem decodifica */
     bool viewing = share_viewing(s);
     {   /* enquanto assiste a uma transmissão o computador não suspende nem apaga a tela; ao parar de assistir, volta ao normal */
