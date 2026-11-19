@@ -125,6 +125,7 @@ mod tests {
     /// A conversão na GPU tem de dar (quase) as mesmas cores que a da CPU: mesma matriz e mesma faixa.
     #[test]
     fn gpu_conversion_matches_the_cpu_one() {
+        if !crate::video::testes_perigosos() { eprintln!("PULADO: usa a GPU de verdade (defina BRIKS_TESTES_PERIGOSOS=1 para rodar)"); return; }
         unsafe {
             let (dev, _ctx) = device();
             let (w, h) = (640u32, 360u32);
@@ -151,6 +152,7 @@ mod tests {
     #[test]
     #[ignore]
     fn bench_gpu_vs_cpu_conversion() {
+        if !crate::video::testes_perigosos() { eprintln!("PULADO: usa a GPU de verdade (defina BRIKS_TESTES_PERIGOSOS=1 para rodar)"); return; }
         unsafe {
             let (dev, ctx) = device();
             for (sw, sh, dw, dh, nome) in [(1920u32, 1080u32, 1920u32, 1080u32, "1080p"), (2560, 1440, 2560, 1440, "1440p"), (3440, 1440, 2580, 1080, "ultrawide→1080p"), (3440, 1440, 3440, 1440, "ultrawide nativo")] {

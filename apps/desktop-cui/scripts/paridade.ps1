@@ -19,10 +19,15 @@ param(
     [switch]$SoInventario,
     [string]$Exe = "",
     [int]$TimeoutSeg = 120,
+    [switch]$Perigosos,          # libera os casos que abrem algo real (toast/overlay topmost, tremer a tela...); também por BRIKS_TESTES_PERIGOSOS=1
+    [int]$PrazoTotalSeg = 2700,  # disjuntor geral: passou disso, para tudo, mata os processos e sai com erro
     [int]$Dy = 39        # deslocamento vertical dos cliques dos roteiros (escritos antes da barra de título própria: 36 px + filete de 3 px)
 )
 $ErrorActionPreference = "Stop"
 $cui = Split-Path -Parent $PSScriptRoot                  # apps\desktop-cui
+. (Join-Path $PSScriptRoot "lib\seguranca.ps1")
+$perigososOk = Resolve-Perigosos ([bool]$Perigosos)
+$inicioGeral = Get-Date; $pulados = @()
 $dir = Join-Path $PSScriptRoot "paridade"
 if (-not $Exe) { $Exe = Join-Path $cui "build\briks_cui.exe" }
 $buildDir = Split-Path -Parent $Exe
@@ -94,7 +99,7 @@ function Expand-Roteiro([string]$origem, [string]$destino) {
 }
 
 function Stop-Filhos {
-    Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($buildDir, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { try { $_.Kill() } catch {} }
+    Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.ProcessName -like "briks*" -and $_.Path.StartsWith($buildDir, [StringComparison]::OrdinalIgnoreCase) }   # só briks*: com -Exe fora da pasta de build isto já matou processos do sistema | ForEach-Object { try { $_.Kill() } catch {} }
 }
 
 $itens = Import-Csv -LiteralPath (Join-Path $dir "itens.csv") -Delimiter "|" -Encoding UTF8
@@ -114,6 +119,14 @@ if (-not $SoInventario) {
     $casos = (Get-Content -LiteralPath (Join-Path $dir "testes.json") -Raw -Encoding UTF8 | ConvertFrom-Json).casos
     foreach ($c in $casos) {
         if ($Filtro -and $c.id -notmatch $Filtro) { continue }
+        if (((Get-Date) - $inicioGeral).TotalSeconds -gt $PrazoTotalSeg) { Write-Host "DISJUNTOR GERAL: passou de $PrazoTotalSeg s; interrompendo o roteiro." -ForegroundColor Red; Stop-Filhos; $casosFalhos++; break }
+        $perigo = Get-MotivoPerigo $c.env (Join-Path $dir $c.roteiro)
+        if ($perigo -and -not $perigososOk) {
+            Write-Host ("caso {0,-18} PULADO (perigoso: {1}); use -Perigosos ou BRIKS_TESTES_PERIGOSOS=1" -f $c.id, $perigo) -ForegroundColor Yellow
+            $pulados += $c.id
+            foreach ($k in $c.checagens) { foreach ($id in @($k.item)) { Set-Res $id "PULADO" "$($c.id): pulado (perigoso: $perigo)" } }
+            continue
+        }
         $w = Join-Path $Saida $c.id
         if (Test-Path $w) { Remove-Item -Recurse -Force $w }
         New-Item -ItemType Directory -Force $w, (Join-Path $w "dados"), (Join-Path $w "capturas") | Out-Null
@@ -136,7 +149,7 @@ if (-not $SoInventario) {
             $proc = $null; $motivo = ""
             try {
                 $proc = [Diagnostics.Process]::Start($psi); $errTask = $proc.StandardError.ReadToEndAsync()
-                if (-not $proc.WaitForExit($TimeoutSeg * 1000)) { $motivo = "tempo esgotado ($TimeoutSeg s)"; try { $proc.Kill() } catch {} }
+                if (-not (Wait-ComDisjuntor $proc $TimeoutSeg $c.id)) { $motivo = "tempo esgotado ($TimeoutSeg s)" }
                 elseif ($proc.ExitCode -ne 0) { $motivo = "saiu com código $($proc.ExitCode)" }
             } finally { Stop-Filhos; try { if ($errTask.Wait(3000)) { [IO.File]::WriteAllText((Join-Path $w "stderr.txt"), $errTask.Result) } } catch {} }
             if (-not $motivo) { break }
@@ -221,6 +234,8 @@ foreach ($l in $linhas) { $md.Add("| $($l.id) | $($l.area) | $($l.item) | $($l.c
 Write-Host ""; Write-Host "=== Paridade Electron x CUI ==="
 foreach ($g in $cont) { Write-Host ("{0,-12} {1}" -f $g.Name, $g.Count) }
 Write-Host ("Relatório: " + (Join-Path $Saida "relatorio.md"))
+if ($pulados.Count) { Write-Host ("Casos PULADOS por serem perigosos ({0}): {1}" -f $pulados.Count, ($pulados -join ", ")) -ForegroundColor Yellow }
+if ($perigososOk) { Exit-LockGpu }
 if ($mudou.Count) { Write-Host "ATENÇÃO: arquivos de %APPDATA%\Briks-CUI mudaram (os casos usam caminhos isolados; costuma ser outra instância do app rodando): $($mudou -join ', ')" -ForegroundColor Yellow }
 $ruim = @($linhas | Where-Object { $_.resultado -eq "FALHOU" -or $_.resultado -eq "REVER" }).Count
 if ($ruim -gt 0) { Write-Host "$ruim item(ns) FALHOU/REVER" -ForegroundColor Red; exit 1 }
