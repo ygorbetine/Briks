@@ -1082,8 +1082,9 @@ void ui_share_dialog(cui_ctx *ui, app_state_t *s) {
         cui_separator(ui);
         cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .justify = CUI_JUSTIFY_BETWEEN, .align = CUI_ALIGN_CENTER) {
             cui_text(ui, "Áudio da transmissão", .font = CUI_FONT_DISPLAY, .size = 14);
-            static const char *const am[3] = { "Da fonte", "Escolher apps", "Sem áudio" };
-            if (seg(ui, "am", am, NULL, 3, &q->audio_mode) && q->audio_mode == 1) cmd("{\"cmd\":\"share.audio.list\"}");
+            static const char *const am[4] = { "Da fonte", "Escolher apps", "Tudo", "Sem áudio" };   /* ordem na tela; audio_mode: 0 fonte, 1 apps, 3 tudo, 2 sem áudio */
+            int ami = q->audio_mode == 3 ? 2 : q->audio_mode == 2 ? 3 : q->audio_mode;
+            if (seg(ui, "am", am, NULL, 4, &ami)) { q->audio_mode = ami == 2 ? 3 : ami == 3 ? 2 : ami; if (q->audio_mode == 1) cmd("{\"cmd\":\"share.audio.list\"}"); }
         }
         if (q->audio_mode == 1) {
             int marked = 0;
@@ -1096,9 +1097,11 @@ void ui_share_dialog(cui_ctx *ui, app_state_t *s) {
                         cui_box(ui, .width = CUI_PX(28), .height = CUI_PX(28), .radius = 8, .bg = CUI_RGBA(0x8b5cf633), .align = CUI_ALIGN_CENTER, .justify = CUI_JUSTIFY_CENTER) { cui_icon(ui, CUI_ICON_MUSIC, 14, B_C3); }
                         cui_column(ui, .gap = 1, .width = CUI_FILL) {
                             cui_text(ui, a->name, .size = 13, .nowrap = true);
-                            cui_text(ui, a->playing ? "Tocando agora" : "Em silêncio", .size = 11, .color = a->playing ? B_ONLINE : B_MUTED);
+                            if (a->playing) cui_progress(ui, audio_lvl(a->peak), .height = 4);
+                            else cui_text(ui, "Em silêncio", .size = 11, .color = B_MUTED);
                         }
                         cui_switch(ui, "##on", &a->on);
+                        if (cui_button(ui, "Só este", .variant = CUI_BUTTON_SECONDARY, .size = CUI_SIZE_SM)) for (int k = 0; k < q->napps; k++) q->apps[k].on = (k == i);
                     }
                     cui_pop_id(ui);
                 }
@@ -1106,6 +1109,8 @@ void ui_share_dialog(cui_ctx *ui, app_state_t *s) {
             cui_text(ui, marked ? "Só o som dos apps marcados entra na transmissão. O Briks e o Discord nunca entram."
                                 : "Nenhum app marcado: a transmissão sai sem áudio. O Briks e o Discord nunca entram.", .size = 12, .color = B_MUTED);
         } else if (q->audio_mode == 0) {
+        } else if (q->audio_mode == 3) {
+            cui_text(ui, "Entra tudo que toca no PC, menos o Briks (as vozes da chamada, para não dar eco) e o Discord.", .size = 12, .color = B_MUTED);
             cui_text(ui, t == 0 ? "Entra o som de tudo que toca no PC, menos o Briks e o Discord." : "Entra só o som do programa dono da janela.", .size = 12, .color = B_MUTED);
         } else cui_text(ui, "A transmissão sai sem áudio.", .size = 12, .color = B_MUTED);
         cui_separator(ui);
