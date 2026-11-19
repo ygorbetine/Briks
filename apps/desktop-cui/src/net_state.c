@@ -94,6 +94,18 @@ void net_friendly_error(const char *raw, char *out, size_t cap) {
     else if (strstr(low, "relógio deste pc difere")) m = "O relógio deste PC está fora de hora e o servidor de chamadas recusou o acesso. Ajuste a data e a hora do Windows.";
     else if (strstr(low, "servidor de chamadas recusou a conexão") && (strstr(low, "401") || strstr(low, "403") || strstr(low, "unauthorized") || strstr(low, "forbidden"))) m = "O servidor de chamadas recusou o token da sala (não é a sua senha). Confira a data e a hora do computador; se continuar, use o modo direto.";
     else if (strstr(low, "serviço de tokens recusou (401") || strstr(low, "serviço de tokens recusou (403")) m = "O servidor de chamadas recusou o acesso desta conta. Saia e entre de novo no Briks; se continuar, use o modo direto.";   /* não é senha: é a sessão/instalação que o servidor de chamadas não aceitou */
+    /* QoL-4: falhas do servidor de chamadas (SFU) e do serviço de tokens: o que houve e o que fazer */
+    else if (strstr(low, "cai logo depois de abrir")) m = "A conexão com o servidor de chamadas abre e cai logo em seguida. Costuma ser a rede ou o firewall: tente de novo ou use o modo Direto em Configurações > Rede.";
+    else if (strstr(low, "conexão de mídia") || strstr(low, "conexao de midia")) m = "A voz e o vídeo não conseguiram passar pelo servidor de chamadas (rede ou firewall bloqueando). Tente de novo ou use o modo Direto em Configurações > Rede.";
+    else if (strstr(low, "perdida (sem resposta") || strstr(low, "parou de responder")) m = "O servidor de chamadas parou de responder. Confira a internet; o Briks tenta reconectar sozinho.";
+    else if (strstr(low, "chamadas caiu")) m = "A conexão com o servidor de chamadas caiu. O Briks tenta reconectar sozinho; se não voltar, saia da sala e entre de novo.";
+    else if (strstr(low, "tempo esgotado ao conectar") || strstr(low, "servidor de chamadas não respondeu") || strstr(low, "serviço de tokens não respondeu")) m = "O servidor de chamadas não respondeu a tempo. Confira a internet e tente de novo; se continuar, use o modo Direto em Configurações > Rede.";
+    else if (strstr(low, "entre na sua conta")) m = "Entre na sua conta do Briks para usar o servidor de chamadas.";
+    else if (strstr(low, "muitas tentativas no serviço de tokens")) m = "Muitas tentativas seguidas de entrar na chamada. Espere alguns segundos e entre na sala de novo.";
+    else if (strstr(low, "serviço de tokens inacessível")) m = "Não foi possível pedir acesso ao servidor de chamadas. Confira a internet e tente de novo; se continuar, use o modo Direto em Configurações > Rede.";
+    else if (strstr(low, "serviço de tokens") || strstr(low, "sem token") || strstr(low, "token inválido") || strstr(low, "url do servidor divergente")) m = "O servidor de chamadas devolveu uma resposta inesperada. Tente de novo em instantes; se continuar, use o modo Direto em Configurações > Rede.";
+    else if (strstr(low, "servidor de chamadas não está configurado")) m = "O servidor de chamadas não está configurado nesta versão. Use o modo Direto em Configurações > Rede.";
+    else if (strstr(low, "servidor de chamadas")) m = "Não foi possível entrar pelo servidor de chamadas. Tente de novo; se continuar, use o modo Direto em Configurações > Rede e envie o log pelo botão Enviar log.";
     else if (strstr(low, "401") || strstr(low, "unauthorized") || strstr(low, "invalid login")) m = "E-mail ou senha incorretos.";
     else if (strstr(low, "429") || strstr(low, "too many")) m = "Muitas tentativas seguidas. Espere um pouco e tente de novo.";
     else if (strstr(low, "500") || strstr(low, "502") || strstr(low, "503") || strstr(low, "504")) m = "O servidor está com problemas agora. Tente de novo em alguns minutos.";

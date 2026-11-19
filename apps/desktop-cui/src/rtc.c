@@ -374,7 +374,8 @@ bool rtc_handle_event(app_state_t *s, const char *line) {
         s->net_sfu = !strcmp(md, "sfu");
         s->net_failed = !strcmp(md, "none");
         { static bool told; if (!told && !strcmp(md, "p2p") && strstr(json_str(j, "reason", ""), "não configurado")) { told = true; settings_notice("Chamada no modo direto (ponto a ponto): o servidor de chamadas ainda não está configurado."); } }   /* aviso leve, uma vez por execução */
-        if (s->net_failed) { char nt[120]; snprintf(nt, sizeof nt, "Rede: sem chamada%s%s", er[0] ? " · " : "", er); settings_notice(nt); }
+        char erf[200]; net_friendly_error(er, erf, sizeof erf); er = erf;   /* QoL-4: sem texto técnico do servidor na tela */
+        if (s->net_failed) { if (er[0]) copy(s->rtc_msg, sizeof s->rtc_msg, er); char nt[220]; snprintf(nt, sizeof nt, "Rede: sem chamada%s%s", er[0] ? " · " : "", er); settings_notice(nt); }
         snprintf(s->net_note, sizeof s->net_note, "%s · %s%s%s%s%s", !strcmp(md, "sfu") ? "Servidor" : !strcmp(md, "none") ? "Sem chamada" : "Direto", json_str(j, "reason", ""),
                  json_str(j, "server", "")[0] ? " · servidor " : "", json_str(j, "server", ""), er[0] ? " · " : "", er);
         changed = true;
@@ -461,7 +462,7 @@ void rtc_pump(app_state_t *s) {
             s->rtc_peers[0].muted_by_me = false; g_pv_loaded = false; g_pv_n = 0;
             peer_volume_restore(s, 0);
         }
-        if (getenv("BRIKS_DEMO_NETFAIL")) { s->net_failed = true; copy(s->rtc_state, sizeof s->rtc_state, "erro"); copy(s->rtc_msg, sizeof s->rtc_msg, "Não foi possível entrar pelo servidor de chamadas: serviço de tokens inacessível"); }
+        if (getenv("BRIKS_DEMO_NETFAIL")) { s->net_failed = true; copy(s->rtc_state, sizeof s->rtc_state, "erro"); net_friendly_error(getenv("BRIKS_DEMO_NETFAIL_RAW") ? getenv("BRIKS_DEMO_NETFAIL_RAW") : "Não foi possível entrar pelo servidor de chamadas: serviço de tokens inacessível", s->rtc_msg, sizeof s->rtc_msg); }
         if (!getenv("BRIKS_DEMO_QUIET")) s->rtc_peers[1].level = 0.6f; if (getenv("BRIKS_DEMO_STATUS")) { copy(s->rtc_peers[0].status, sizeof s->rtc_peers[0].status, "Chego em 10 minutos"); copy(s->rtc_peers[1].presence, sizeof s->rtc_peers[1].presence, "Jogando Valorant"); } s->rtc_owner_me = true; s->in_room = true;
         copy(s->rtc_state, sizeof s->rtc_state, "conectado"); s->rtc_peer_count = s->rtc_authed_count = dn;   /* a demonstração mostra a sala como conectada */
         const char *o = getenv("BRIKS_DEV_OPEN"); if (o && !strcmp(o, "kick")) { s->kick_slot = 0; s->kick_open = true; }

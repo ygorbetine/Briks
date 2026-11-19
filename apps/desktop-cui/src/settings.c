@@ -370,6 +370,7 @@ int settings_probe(const char *n, app_state_t *s) {
     { int op = overlay_probe(n); if (op != -9999) return op; }
     { int cp = cam_probe(n); if (cp != -9999) return cp; }
     if (!strcmp(n, "log_sent")) return g_log_sent;
+    if (!strncmp(n, "rtcmsg:", 7)) { char w[160]; size_t k = 0; for (const char *q = n + 7; *q && k < sizeof w - 1; q++) w[k++] = *q == '+' ? ' ' : *q; w[k] = 0; return strstr(s->rtc_msg, w) != NULL; }   /* teste: a mensagem de erro da chamada contém o texto */
     if (!strcmp(n, "cfg_ov_on")) return g_set.ov_on;
     if (!strcmp(n, "cfg_ov_tiles")) { int c = 0; for (const char *p = g_set.ov_tiles; *p; p++) if (*p == ';') c++; return g_set.ov_tiles[0] ? c + 1 : 0; }
     if (!strcmp(n, "cfg_ov_toff")) { int c = 0; for (const char *p = g_set.ov_toff; *p; p++) if (*p == ';') c++; return g_set.ov_toff[0] ? c + 1 : 0; }

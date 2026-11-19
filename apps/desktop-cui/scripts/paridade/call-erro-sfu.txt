@@ -1,0 +1,5 @@
+# QoL-4: erro técnico do servidor de chamadas vira frase em português com o que fazer (net_friendly_error); sem "token", "HTTP" ou inglês na tela
+waitms 1200
+expect rtcmsg:modo+Direto+em+Configurações 1
+expect rtcmsg:troque+para+P2P 0
+snap sf0
