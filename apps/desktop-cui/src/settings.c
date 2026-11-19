@@ -708,6 +708,7 @@ void settings_dialog(cui_ctx *ui, app_state_t *s) {
                         sw(ui, "Amigo começou a transmitir", "Avisa quando alguém começa a compartilhar a tela numa chamada.", &g_set.nt_stream);
                     }
                     sys_settings_notifications(ui);   /* winstate.c: nova mensagem e sons */
+                    nudge_settings(ui);   /* nudge.c: chamar atenção e Não perturbar */
                     break;
                 case 7: /* Avisos */
                     SCARD(ui, "AVISOS") {

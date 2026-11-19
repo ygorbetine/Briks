@@ -1,0 +1,13 @@
+# Conversa com amigo: botão "Chamar atenção" (sino) no cabeçalho; rodapé do usuário ganha a lua quando o Não perturbar está ligado.
+waitms 900
+snap u0
+sys nudge dnd 30
+waitms 400
+snap u1
+sys nudge send 0
+waitms 300
+snap u2
+sys nudge send 0
+waitms 300
+snap u3
+expect nudge_tx_denied 1

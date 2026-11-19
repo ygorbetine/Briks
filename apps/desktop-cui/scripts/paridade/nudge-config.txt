@@ -1,0 +1,14 @@
+# Configurações > Notificações: cartões "Chamar atenção" e "Não perturbar"; o ícone de lua aparece no rodapé quando o Não perturbar está ligado.
+waitms 900
+snap n0
+mat 760 450
+waitms 200
+wheel -6
+waitms 200
+wheel -6
+waitms 300
+snap n1
+sys nudge dnd 30
+waitms 400
+snap n2
+expect nudge_dnd 1

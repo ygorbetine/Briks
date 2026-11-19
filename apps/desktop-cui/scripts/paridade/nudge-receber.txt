@@ -1,0 +1,82 @@
+# Chamar atenção (nudge): regras de quem pode, limites e decisão do efeito. Demo social, teste oculto (o efeito de tela NÃO é desenhado: só conta).
+# "sys nudge friendfp" dá um fp ao 1º amigo; "coreev" finge o dm.signal do core; "sys nudge clock" adianta o relógio dos limites.
+waitms 900
+sys nudge friendfp 0 abababababababababababababababababababababababababababababababab
+sys nudge bg 0
+sys nudge tray 0
+sys nudge busy 0
+sys nudge max 0
+sys nudge cfg on 1
+sys nudge cfg mode 0
+# 1) amigo válido: tela inteira (ação 1)
+coreev {"ev":"dm.signal","fp":"abababababababababababababababababababababababababababababababab","kind":"nudge","data":{"name":"Ana"}}
+expect nudge_recv 1
+expect nudge_action 1
+expect nudge_fx_screen 1
+waitms 1300
+# 2) logo em seguida do mesmo amigo: negado (1 a cada 15 s)
+coreev {"ev":"dm.signal","fp":"abababababababababababababababababababababababababababababababab","kind":"nudge","data":{"name":"Ana"}}
+expect nudge_recv 1
+expect nudge_rx_denied 1
+# 3) quem não é amigo: descartado
+coreev {"ev":"dm.signal","fp":"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd","kind":"nudge","data":{"name":"X"}}
+expect nudge_dropped 1
+expect nudge_recv 1
+# 4) Não perturbar: recebe, mas não treme (ação 0)
+sys nudge clock 61000
+sys nudge dnd 30
+expect nudge_dnd 1
+coreev {"ev":"dm.signal","fp":"abababababababababababababababababababababababababababababababab","kind":"nudge","data":{"name":"Ana"}}
+expect nudge_action 0
+expect nudge_fx_screen 1
+sys nudge dnd off
+expect nudge_dnd 0
+# 5) jogo/apresentação: nada
+sys nudge clock 61000
+sys nudge busy 1
+coreev {"ev":"dm.signal","fp":"abababababababababababababababababababababababababababababababab","kind":"nudge","data":{"name":"Ana"}}
+expect nudge_action 0
+sys nudge busy 0
+# 6) modo só a janela (2); maximizada cai para aviso (4)
+sys nudge clock 61000
+sys nudge cfg mode 1
+coreev {"ev":"dm.signal","fp":"abababababababababababababababababababababababababababababababab","kind":"nudge","data":{"name":"Ana"}}
+expect nudge_action 2
+expect nudge_fx_window 1
+waitms 800
+sys nudge clock 61000
+sys nudge max 1
+coreev {"ev":"dm.signal","fp":"abababababababababababababababababababababababababababababababab","kind":"nudge","data":{"name":"Ana"}}
+expect nudge_action 4
+sys nudge max 0
+# 7) segundo plano: pisca (3), sem tremer; bandeja: só aviso (4)
+sys nudge cfg mode 0
+sys nudge clock 61000
+sys nudge bg 1
+coreev {"ev":"dm.signal","fp":"abababababababababababababababababababababababababababababababab","kind":"nudge","data":{"name":"Ana"}}
+expect nudge_action 3
+expect nudge_flashes 1
+sys nudge clock 61000
+sys nudge tray 1
+coreev {"ev":"dm.signal","fp":"abababababababababababababababababababababababababababababababab","kind":"nudge","data":{"name":"Ana"}}
+expect nudge_action 4
+sys nudge tray 0
+sys nudge bg 0
+# 8) receber desligado: nada
+sys nudge clock 61000
+sys nudge cfg on 0
+coreev {"ev":"dm.signal","fp":"abababababababababababababababababababababababababababababababab","kind":"nudge","data":{"name":"Ana"}}
+expect nudge_action 0
+expect nudge_fx_screen 1
+# 9) envio: 2º no mesmo amigo em seguida é negado ("Aguarde alguns segundos")
+sys nudge send 0
+sys nudge send 0
+expect nudge_tx_denied 1
+# 10) fim do Não perturbar por tempo
+sys nudge dnd 30
+sys nudge dndexpired
+sys nudge clock 1000
+sys nudge tick
+expect nudge_dnd 0
+waitms 1500
+expect nudge_fx_live 0
