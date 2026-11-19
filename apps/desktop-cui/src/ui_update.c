@@ -69,6 +69,9 @@ void update_dialog(cui_ctx *ui, app_state_t *s) {
 
 typedef struct { const char *version; const char *items[14]; } notes_t;
 static const notes_t NOTES[] = {
+    { "1.6.5", {
+        "Abertura: nova vinheta, mais curta (2 segundos) e na metade do tamanho.",
+        NULL } },
     { "1.6.4", {
         "Abertura animada: ao abrir o Briks toca uma vinheta curta com som. Clique ou Esc para pular; dá para desligar em Configurações > Sobre > Sistema.",
         "Voz: o volume de saída agora vai até 200%, e a voz de quem fala baixo é nivelada sozinha, sem levantar o chiado.",

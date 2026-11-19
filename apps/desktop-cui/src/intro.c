@@ -193,13 +193,14 @@ static bool begin(bool enabled, bool start_min) {
     g_t0 = qpc(); g_state = 1; return true;
 }
 
+#define INTRO_SCALE 0.5f   /* tamanho na tela em relação ao vídeo: metade (512 px de origem -> 256 px) */
 #define INTRO_OPACITY 0.8f   /* opacidade máxima da abertura (fundo e vídeo): o app aparece de leve por baixo */
 typedef struct { cui_texture tex; int w, h; float a; } paint_t;
 static void paint(cui_ctx *ui, cui_rect r, void *u) {
     const paint_t *p = (const paint_t *)u;
     cui_draw_rect(ui, r, CUI_CORNERS(0), (cui_color){ 0x0f, 0x03, 0x16, (uint8_t)(255.0f * p->a + 0.5f) });
     if (!p->tex || p->w <= 0 || p->h <= 0) return;
-    float s = fminf(1.0f, fminf(r.w * 0.8f / (float)p->w, r.h * 0.8f / (float)p->h));
+    float s = fminf(INTRO_SCALE, fminf(r.w * 0.8f / (float)p->w, r.h * 0.8f / (float)p->h));
     float w = (float)p->w * s, h = (float)p->h * s;
     cui_draw_image(ui, p->tex, (cui_rect){ r.x + (r.w - w) * 0.5f, r.y + (r.h - h) * 0.5f, w, h }, (cui_rect){ 0, 0, 1, 1 }, CUI_CORNERS(0), (cui_color){ 255, 255, 255, (uint8_t)(255.0f * p->a + 0.5f) });
 }
