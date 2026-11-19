@@ -69,6 +69,14 @@ void update_dialog(cui_ctx *ui, app_state_t *s) {
 
 typedef struct { const char *version; const char *items[14]; } notes_t;
 static const notes_t NOTES[] = {
+    { "1.6.4", {
+        "Abertura animada: ao abrir o Briks toca uma vinheta curta com som. Clique ou Esc para pular; dá para desligar em Configurações > Sobre > Sistema.",
+        "Voz: o volume de saída agora vai até 200%, e a voz de quem fala baixo é nivelada sozinha, sem levantar o chiado.",
+        "Voz: nova supressão de ruído por rede neural (Alta qualidade, RNNoise) em Configurações > Voz, além do filtro Padrão.",
+        "Áudio: o dispositivo padrão do sistema passa a ser o de comunicação do Windows, o mesmo que o Discord e o Teams usam.",
+        "Grupos: Assistir na lista de membros agora entra na sala e abre a transmissão da pessoa.",
+        "Chamada: ao entrar, o Briks segue o modo da sala (Direto ou Servidor) e avisa ou pergunta antes de trocar; cada entrada usa um token só.",
+        NULL } },
     { "1.6.3", {
         "Amigos: com o Briks minimizado, na bandeja ou em segundo plano, o aviso de amigo online ou entrando na sua chamada agora aparece como um cartão do Windows no canto da tela, por cima dos outros programas, com foto e bolinha verde. Clicar abre a conversa; o botão direito dispensa.",
         "Amigos: o cartão não rouba o foco do que você está fazendo e some sozinho em 6 segundos (o mouse em cima segura). Com o Briks em foco continua o cartão de dentro do app.",
