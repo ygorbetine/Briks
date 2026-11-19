@@ -326,6 +326,8 @@ int sys_probe(const char *n) {
     if (!strcmp(n, "active_friend")) return g_s ? g_s->active_friend : -1;
     if (!strcmp(n, "tray_visible")) return tray_visible();
     if (!strcmp(n, "tray_icon_badged")) return g_tray_icon_badged;
+    if (!strcmp(n, "sys_mic")) return g_sys.mic_on;   /* lembrado entre chamadas e aberturas (sistema.cfg) */
+    if (!strcmp(n, "sys_deaf")) return g_sys.deaf;
     if (!strcmp(n, "tb_hit")) return titlebar_hit_result();
     return titlebar_probe(n);
 }

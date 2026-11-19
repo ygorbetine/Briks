@@ -1,0 +1,21 @@
+# QoL-2: microfone e ensurdecer ficam como o usuário deixou (sistema.cfg) e valem na próxima entrada na sala
+waitms 1500
+expect sys_mic 1
+expect sys_deaf 0
+sys cmd mute
+waitms 300
+expect mic 0
+expect sys_mic 0
+sys cmd mute
+waitms 300
+expect mic 1
+expect sys_mic 1
+mclick 257 787
+waitms 400
+expect deaf_on 1
+expect sys_deaf 1
+mclick 257 787
+waitms 400
+expect deaf_on 0
+expect sys_deaf 0
+snap q0
