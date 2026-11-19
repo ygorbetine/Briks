@@ -60,7 +60,7 @@ enum { BKP_UNKNOWN, BKP_NONE, BKP_OK, BKP_OTHER };   /* não consultado; sem có
 #define SH_MAX_SRC 24
 #define SH_MAX_APPS 16
 typedef struct { char id[24]; char name[96]; char sub[64]; char thumb[280]; int w, h; cui_texture tex; bool tex_tried; } share_src_t;
-typedef struct { unsigned pid; char name[64]; bool playing, on; } share_app_t;
+typedef struct { unsigned pid; char name[64]; bool playing, on; float peak; } share_app_t;
 typedef struct { int res, fps, br_mode, content; float br_custom; } qual_t;   /* qualidade de UMA transmissão (1.4.1: cada tela tem a sua) */
 typedef struct {
     bool dialog_open, loading, quality_open;
@@ -68,7 +68,8 @@ typedef struct {
     int tab;                                   /* 0 telas, 1 janelas */
     int sel[2];                                /* fonte escolhida em cada aba */
     share_src_t src[2][SH_MAX_SRC]; int nsrc[2];
-    int audio_mode;                            /* 0 da fonte, 1 escolher apps, 2 sem áudio */
+    int audio_mode;                            /* 0 da fonte, 1 escolher apps, 2 sem áudio, 3 tudo menos a chamada do Briks (só ao vivo/início) */
+    bool audio_unsupported; int audio_quiet_n; /* Windows sem captura por processo (build < 20348); segundos seguidos sem som saindo na transmissão */
     share_app_t apps[SH_MAX_APPS]; int napps;
     int res, fps, br_mode;                     /* índices: 480p/720p/1080p/1440p/4K; 15/30/60; automático/alto/máximo/personalizado */
     float br_custom;                           /* Mbps (1..50) quando personalizado */

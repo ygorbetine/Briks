@@ -1,0 +1,34 @@
+# 1.6: painel "Áudio da transmissão" ao vivo: apps com nível, "Só este", "Tudo menos a chamada", aviso de silêncio e Windows sem captura por processo
+waitms 1200
+coreev {"ev":"share.local","state":"on","w":1280,"h":720,"fps":30,"kbps":4000,"audio":true}
+coreev {"ev":"share.audio.apps","supported":true,"apps":[{"pid":4001,"exe":"Spotify.exe","name":"Spotify","playing":true,"peak":0.2,"excluded":false},{"pid":4002,"exe":"chrome.exe","name":"chrome","playing":false,"peak":0.0,"excluded":false},{"pid":4003,"exe":"Briks.exe","name":"Briks","playing":true,"peak":0.5,"excluded":true}]}
+waitms 600
+shot c0-barra
+click 1012 688
+waitms 700
+shot c1-painel
+expect share_napps 2
+click 1017 538
+waitms 700
+expect share_amode 1
+shot c2-apps
+coreev {"ev":"share.stats","audio_peak":0.0,"audio_sources":1}
+coreev {"ev":"share.stats","audio_peak":0.0,"audio_sources":1}
+coreev {"ev":"share.stats","audio_peak":0.0,"audio_sources":1}
+coreev {"ev":"share.stats","audio_peak":0.0,"audio_sources":1}
+coreev {"ev":"share.stats","audio_peak":0.0,"audio_sources":1}
+waitms 700
+expect share_quiet 5
+shot c3-silencio
+coreev {"ev":"share.stats","audio_peak":0.3,"audio_sources":1}
+waitms 500
+expect share_quiet 0
+shot c4-com-som
+click 1135 431
+waitms 600
+expect share_amode 3
+shot c5-tudo
+coreev {"ev":"share.audio.apps","supported":false,"apps":[]}
+waitms 600
+expect share_unsup 1
+shot c6-sem-suporte

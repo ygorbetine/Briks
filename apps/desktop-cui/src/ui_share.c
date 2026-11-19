@@ -375,8 +375,9 @@ bool share_handle_event(app_state_t *s, const jval *j, const char *ev) {
             const jval *e = json_at(arr, i);
             if (jbool(e, "excluded")) continue;          /* o próprio Briks e o Discord nunca entram */
             share_app_t *a = &q->apps[q->napps++]; memset(a, 0, sizeof *a);
-            a->pid = (unsigned)jnum(e, "pid"); copy(a->name, sizeof a->name, json_str(e, "name", "")); a->playing = jbool(e, "playing");
+            a->pid = (unsigned)jnum(e, "pid"); copy(a->name, sizeof a->name, json_str(e, "name", "")); a->playing = jbool(e, "playing"); a->peak = (float)jnum(e, "peak");
             if (a->name[0] >= 'a' && a->name[0] <= 'z') a->name[0] -= 32;
+        { const jval *sup = json_get(j, "supported"); q->audio_unsupported = sup && !jbool(j, "supported"); }
             for (int k = 0; k < nold; k++) if (old[k].pid == a->pid) a->on = old[k].on;
         }
     } else if (!strcmp(ev, "share.viewers")) {   /* core: {slot, count, peers:[ids]}; nunca conta o próprio usuário */
@@ -451,6 +452,7 @@ bool share_handle_event(app_state_t *s, const jval *j, const char *ev) {
     } else if (!strcmp(ev, "share.stats")) {
         q->stat_fps = jnum(j, "fps"); q->stat_kbps = jint(j, "kbps"); q->enc_ms = jnum(j, "enc_ms"); q->cpu = jint(j, "cpu_pct");
         q->audio_peak = jnum(j, "audio_peak"); q->audio_sources = jint(j, "audio_sources");
+        if (q->audio_on && !q->audio_muted && q->audio_peak < 0.003f) q->audio_quiet_n++; else q->audio_quiet_n = 0;   /* uma medição por segundo */
         q->live_h = jint(j, "h"); q->target_fps = jint(j, "target_fps"); q->target_kbps = jint(j, "target_kbps"); q->est_kbps = jint(j, "est_kbps");
         q->rtt_ms = jint(j, "rtt_ms"); q->rtx = jint(j, "rtx"); q->loss_pct = jnum(j, "loss_pct");
         copy(q->adapting, sizeof q->adapting, json_str(j, "adapting", "")); copy(q->reason, sizeof q->reason, json_str(j, "reason", ""));
@@ -976,18 +978,26 @@ static void send_audio_live(app_state_t *s) {
     share_state_t *q = &s->sh;
     char line[640], pids[400] = ""; size_t o = 0;
     for (int i = 0; i < q->napps && o < sizeof pids - 16; i++) if (q->apps[i].on) o += (size_t)snprintf(pids + o, sizeof pids - o, "%s%u", o ? "," : "", q->apps[i].pid);
-    snprintf(line, sizeof line, "{\"cmd\":\"share.audio.set\",\"audio\":\"%s\",\"pids\":[%s],\"kind\":\"%s\",\"id\":\"%s\"}", q->audio_mode == 1 ? "apps" : q->audio_mode == 0 ? "source" : "none", pids, q->last_kind, q->last_id);
+    snprintf(line, sizeof line, "{\"cmd\":\"share.audio.set\",\"audio\":\"%s\",\"pids\":[%s],\"kind\":\"%s\",\"id\":\"%s\"}", q->audio_mode == 1 ? "apps" : q->audio_mode == 0 ? "source" : q->audio_mode == 3 ? "all" : "none", pids, q->last_kind, q->last_id);
+    q->audio_quiet_n = 0;   /* trocou o canal: o aviso de silêncio recomeça */
     cmd(line);
 }
 static void share_audio_live(cui_ctx *ui, app_state_t *s) {
+static float audio_lvl(float peak) { float v = sqrtf(peak < 0 ? 0 : peak); return v > 1 ? 1 : v; }   /* o ouvido é logarítmico: a raiz deixa sons baixos visíveis */
     share_state_t *q = &s->sh;
-            const int want = codec_effective(q);
-    static double last_poll; if (cui_time(ui) - last_poll > 2.0) { last_poll = cui_time(ui); cmd("{\"cmd\":\"share.audio.list\"}"); }
-    cui_request_wakeup(ui, 1.0f);
-    cui_text(ui, "Som da transmissão", .font = CUI_FONT_DISPLAY, .size = 15);
-    static const char *const am[2] = { "Da fonte", "Escolher apps" };
-    int mode = q->audio_mode == 1 ? 1 : 0;
-    if (cui_segmented(ui, "amlive", am, 2, &mode, .full_width = true, .size = CUI_SIZE_SM)) { q->audio_mode = mode; send_audio_live(s); }
+    static double last_poll; if (cui_time(ui) - last_poll > 1.0) { last_poll = cui_time(ui); cmd("{\"cmd\":\"share.audio.list\"}"); }
+    cui_request_wakeup(ui, 0.5f);
+    bool any_on = false; for (int i = 0; i < q->napps; i++) if (q->apps[i].on) any_on = true;
+    cui_text(ui, "Áudio da transmissão", .font = CUI_FONT_DISPLAY, .size = 15);
+    if (q->audio_unsupported) {
+        cui_box(ui, .dir = CUI_ROW, .gap = 8, .pad_x = 10, .pad_y = 8, .radius = 10, .bg = CUI_RGBA(0xf5a52422), .border = 1, .border_color = CUI_RGBA(0xf5a52466), .width = CUI_FILL, .align = CUI_ALIGN_CENTER) {
+            cui_icon(ui, CUI_ICON_TRIANGLE_ALERT, 14, CUI_RGB(0xf5b942));
+            cui_text(ui, "Este Windows não separa o som por app (precisa do Windows 11 ou do Windows 10 build 20348+). A escolha de apps não vai funcionar aqui.", .size = 12, .color = CUI_RGB(0xf5d9a0));
+        }
+    }
+    static const char *const am[3] = { "Da fonte", "Apps", "Tudo" };
+    int mode = q->audio_mode == 1 ? 1 : q->audio_mode == 3 ? 2 : 0;
+    if (cui_segmented(ui, "amlive", am, 3, &mode, .full_width = true, .size = CUI_SIZE_SM)) { q->audio_mode = mode == 1 ? 1 : mode == 2 ? 3 : 0; send_audio_live(s); }
     if (q->audio_mode == 1) {
         int marked = 0;
         if (!q->napps) cui_text(ui, "Nenhum app com áudio aberto agora.", .size = 13, .color = B_MUTED);
@@ -995,20 +1005,39 @@ static void share_audio_live(cui_ctx *ui, app_state_t *s) {
             for (int i = 0; i < q->napps; i++) {
                 share_app_t *a = &q->apps[i]; if (a->on) marked++;
                 cui_push_id_int(ui, 600 + i);
-                cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .height = CUI_PX(46), .pad_x = 12, .gap = 10, .radius = 10, .bg = B_GLASS_SOFT, .border = 1, .border_color = B_GLASS_BORDER_SOFT, .align = CUI_ALIGN_CENTER) {
+                cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .height = CUI_PX(46), .pad_x = 10, .gap = 8, .radius = 10, .bg = a->on ? CUI_RGBA(0x8b5cf622) : B_GLASS_SOFT, .border = 1, .border_color = a->on ? CUI_RGBA(0x8b5cf688) : B_GLASS_BORDER_SOFT, .align = CUI_ALIGN_CENTER) {
                     cui_icon(ui, CUI_ICON_MUSIC, 14, B_C3);
-                    cui_column(ui, .gap = 1, .width = CUI_FILL) {
+                    cui_column(ui, .gap = 2, .width = CUI_FILL) {
                         cui_text(ui, a->name, .size = 13, .nowrap = true);
-                        cui_text(ui, a->playing ? "Tocando agora" : "Em silêncio", .size = 11, .color = a->playing ? B_ONLINE : B_MUTED);
+                        if (a->playing) cui_progress(ui, audio_lvl(a->peak), .height = 4);
+                        else cui_text(ui, "Em silêncio", .size = 11, .color = B_MUTED);
                     }
                     if (cui_switch(ui, "##on", &a->on)) send_audio_live(s);
+                    if (cui_button(ui, "Só este", .variant = CUI_BUTTON_SECONDARY, .size = CUI_SIZE_SM)) { for (int k = 0; k < q->napps; k++) q->apps[k].on = (k == i); send_audio_live(s); }
                 }
                 cui_pop_id(ui);
             }
         }
-        cui_text(ui, marked ? "Só o som dos apps marcados sai na transmissão. O Briks e o Discord nunca entram." : "Nenhum app marcado: a transmissão fica sem som até marcar um.", .size = 12, .color = B_MUTED);
+        cui_text(ui, marked ? "Só o som dos apps marcados sai na transmissão. Dá para trocar a qualquer momento, sem parar a transmissão. O Briks (as vozes da chamada) e o Discord nunca entram."
+                            : "Nenhum app marcado: a transmissão fica sem som até marcar um.", .size = 12, .color = B_MUTED);
+    } else if (q->audio_mode == 3) {
+        cui_text(ui, "Entra tudo que toca no PC, menos o Briks (as vozes da chamada, para não dar eco) e o Discord.", .size = 12, .color = B_MUTED);
     } else cui_text(ui, "Entra o som da fonte (tela: tudo menos o Briks e o Discord; janela: só o programa dela).", .size = 12, .color = B_MUTED);
 }
+    /* o que está de fato saindo na transmissão */
+    cui_separator(ui);
+    cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .gap = 8, .align = CUI_ALIGN_CENTER) {
+        cui_text(ui, "Saindo agora", .size = 12, .color = B_MUTED, .nowrap = true);
+        cui_box(ui, .width = CUI_FILL) { cui_progress(ui, q->audio_muted ? 0.0f : audio_lvl(q->audio_peak), .height = 6); }
+    }
+    if (q->audio_muted) cui_text(ui, "Sem áudio: o botão da barra está desligado.", .size = 12, .color = B_MUTED);
+    else if (q->audio_quiet_n >= 5 && !(q->audio_mode == 1 && !any_on)) {
+        char w[160]; snprintf(w, sizeof w, q->audio_mode == 1 ? "O app escolhido não está tocando nada há %d s." : "Nenhum som saindo na transmissão há %d s.", q->audio_quiet_n);
+        cui_box(ui, .dir = CUI_ROW, .gap = 8, .pad_x = 10, .pad_y = 8, .radius = 10, .bg = CUI_RGBA(0xf5a52422), .border = 1, .border_color = CUI_RGBA(0xf5a52466), .width = CUI_FILL, .align = CUI_ALIGN_CENTER) {
+            cui_icon(ui, CUI_ICON_TRIANGLE_ALERT, 14, CUI_RGB(0xf5b942));
+            cui_text(ui, w, .size = 12, .color = CUI_RGB(0xf5d9a0));
+        }
+    }
 
 /* ---------- diálogo ---------- */
 static bool g_pop_req; static int g_pop_grace; static cui_id g_shqd_id;   /* painel lateral de qualidade: pedido de abertura, tolerância de quadros e id (resolvido dentro do escopo do diálogo) */
@@ -1082,7 +1111,7 @@ void ui_share_dialog(cui_ctx *ui, app_state_t *s) {
         } else {
             char sum[220];
             snprintf(sum, sizeof sum, "Fonte: %s · Áudio: %s", n > 0 && q->sel[t] < n ? q->src[t][q->sel[t]].name : "nenhuma",
-                     q->audio_mode == 2 ? "sem áudio" : q->audio_mode == 1 ? "só os apps marcados" : "da fonte");
+                     q->audio_mode == 2 ? "sem áudio" : q->audio_mode == 1 ? "só os apps marcados" : q->audio_mode == 3 ? "tudo menos a chamada" : "da fonte");
             cui_text(ui, sum, .size = 13, .color = B_MUTED, .nowrap = true);
         }
         char chip[80]; { share_state_t tmp = *q; tmp.active = false; quality_chip(&tmp, chip, sizeof chip); }
@@ -1475,6 +1504,9 @@ int share_probe(const char *n, const app_state_t *s) {
     if (!strcmp(n, "dlg_quality")) return s->sh.quality_open ? 1 : 0;
     if (!strcmp(n, "dlg_res")) return s->sh.res;
     if (!strcmp(n, "dlg_fps")) return s->sh.fps;
+    if (!strcmp(n, "share_quiet")) return s->sh.audio_quiet_n;   /* segundos seguidos sem som saindo */
+    if (!strcmp(n, "share_unsup")) return s->sh.audio_unsupported;
+    if (!strcmp(n, "share_napps")) return s->sh.napps;
     if (!strcmp(n, "dlg_open")) return s->sh.dialog_open ? 1 : 0;
     if (!strcmp(n, "eye0")) return s->sh.vknown[0] ? s->sh.viewers[0] : -1;   /* -1 = sem dado (oculto) */
     if (!strcmp(n, "eye1")) return s->sh.vknown[1] ? s->sh.viewers[1] : -1;

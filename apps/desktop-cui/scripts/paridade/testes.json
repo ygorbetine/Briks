@@ -158,6 +158,7 @@
     { "id": "transmissao-audio", "demo": "call", "roteiro": "transmissao-audio.txt", "env": { "BRIKS_DEMO_PEERS": "3" }, "checagens": [
       { "item": "CHM-31", "de": "u0-com", "para": "u1-sem", "esperado": "muda", "min": 20 },
       { "item": "CHM-31", "de": "u1-sem", "para": "u2-com", "esperado": "muda", "min": 20 } ] },
+    { "id": "canal-audio", "demo": "call", "roteiro": "canal-audio.txt", "env": { "BRIKS_DEMO_PEERS": "3" }, "checagens": [] },
     { "id": "transmissao-qualidade", "demo": "call", "roteiro": "transmissao-qualidade.txt", "env": { "BRIKS_DEMO_PEERS": "3", "BRIKS_DEV_SHARE": "qual-slots" }, "checagens": [
       { "item": "CHM-34", "de": "q-antes", "para": "q-selecionada-2", "esperado": "muda", "min": 100 } ] },
     { "id": "transmissao-codec-auto", "demo": "call", "roteiro": "transmissao-codec-auto.txt", "env": { "BRIKS_DEMO_PEERS": "3", "BRIKS_DEV_SHARE": "demo-quality" }, "checagens": [

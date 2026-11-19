@@ -63,6 +63,18 @@ pub fn exe_of(pid: u32) -> String {
     }
 }
 
+/// A captura por processo (WASAPI process loopback) exige Windows 10 build 20348+ / Windows 11 (build >= 20348 no número do sistema).
+pub fn process_loopback_supported() -> bool { windows_build() >= 20348 }
+
+#[repr(C)]
+struct OsVer { size: u32, major: u32, minor: u32, build: u32, platform: u32, csd: [u16; 128] }
+#[link(name = "ntdll")]
+extern "system" { fn RtlGetVersion(v: *mut OsVer) -> i32; }
+pub fn windows_build() -> u32 {
+    let mut v = OsVer { size: std::mem::size_of::<OsVer>() as u32, major: 0, minor: 0, build: 0, platform: 0, csd: [0; 128] };
+    if unsafe { RtlGetVersion(&mut v) } == 0 { v.build } else { 0 }
+}
+
 /// Apps com sessão de áudio na saída padrão: [{pid, exe, name, playing}] ("playing" = som saindo agora).
 pub fn list_apps() -> Vec<Value> {
     let mut out: Vec<Value> = vec![];
@@ -81,12 +93,13 @@ pub fn list_apps() -> Vec<Value> {
             let active = c.GetState().map(|s| s == AudioSessionStateActive).unwrap_or(false);
             let peak = c.cast::<IAudioMeterInformation>().ok().and_then(|m| m.GetPeakValue().ok()).unwrap_or(0.0);
             let playing = active && peak > 0.0005;
+            let peak = if active { peak } else { 0.0 };
             let exe = exe_of(pid);
             if exe.is_empty() { continue; }
-            if let Some(&k) = seen.get(&pid) { if playing { out[k]["playing"] = json!(true); } continue; }
+            if let Some(&k) = seen.get(&pid) { if playing { out[k]["playing"] = json!(true); } if peak as f64 > out[k]["peak"].as_f64().unwrap_or(0.0) { out[k]["peak"] = json!(peak); } continue; }
             let name = exe.trim_end_matches(".exe").trim_end_matches(".EXE").to_string();
             seen.insert(pid, out.len());
-            out.push(json!({ "pid": pid, "exe": exe, "name": name, "playing": playing, "excluded": excluded_exe(&exe) }));
+            out.push(json!({ "pid": pid, "exe": exe, "name": name, "playing": playing, "peak": peak, "excluded": excluded_exe(&exe) }));
         }
     }
     out
@@ -173,11 +186,13 @@ pub struct ProcAudio {
     mode: Arc<Mutex<AudioMode>>,
     /// 1.4.1: "Sem áudio" ao vivo. A faixa continua aberta (nada a renegociar): só deixa de sair som, na hora e sem esperar a varredura de 2 s.
     muted: Arc<AtomicBool>,
+    /// troca de modo ao vivo: a próxima volta do laço reavalia as fontes na hora (só o áudio mexe; o vídeo nem sabe)
+    rescan: Arc<AtomicBool>,
     pub stats: Arc<AudioStats>,
 }
 impl ProcAudio {
     pub fn stop(&self) { self.stop.store(true, Ordering::Relaxed); }
-    pub fn set_mode(&self, m: AudioMode) { *self.mode.lock().unwrap() = m; }
+    pub fn set_mode(&self, m: AudioMode) { *self.mode.lock().unwrap() = m; self.rescan.store(true, Ordering::Relaxed); }
     pub fn set_muted(&self, m: bool) { self.muted.store(m, Ordering::Relaxed); }
     pub fn is_muted(&self) -> bool { self.muted.load(Ordering::Relaxed) }
 }
@@ -206,7 +221,8 @@ pub fn start(mode: AudioMode, track: Arc<TrackLocalStaticSample>) -> ProcAudio {
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
     tokio::spawn(async move { while let Some(p) = rx.recv().await { let _ = track.write_sample(&Sample { data: Bytes::from(p), duration: Duration::from_millis(20), ..Default::default() }).await; } });
     let muted = Arc::new(AtomicBool::new(false));
-    let (st, sts, md, mu) = (stop.clone(), stats.clone(), mode.clone(), muted.clone());
+    let rescan = Arc::new(AtomicBool::new(false));
+    let (st, sts, md, mu, rs) = (stop.clone(), stats.clone(), mode.clone(), muted.clone(), rescan.clone());
     std::thread::spawn(move || {
         let mut enc = match opus::Encoder::new(RATE, opus::Channels::Stereo, opus::Application::Audio) { Ok(e) => e, Err(_) => return };
         let _ = enc.set_bitrate(opus::Bitrate::Bits(128_000));
@@ -219,7 +235,7 @@ pub fn start(mode: AudioMode, track: Arc<TrackLocalStaticSample>) -> ProcAudio {
         let (mut out, mut mix) = (vec![0u8; 4000], vec![0.0f32; FRAME * 2]);
         let (mut peak, mut peak_t) = (0.0f32, Instant::now());
         while !st.load(Ordering::Relaxed) {
-            if last_scan.elapsed() > Duration::from_secs(2) {
+            if last_scan.elapsed() > Duration::from_secs(2) || rs.swap(false, Ordering::Relaxed) {
                 last_scan = Instant::now();
                 let want = wanted(&md.lock().unwrap());
                 srcs.retain(|pid, s| { let keep = want.contains(pid) && !s.dead.load(Ordering::Relaxed); if !keep { s.stop.store(true, Ordering::Relaxed); } keep });
@@ -256,14 +272,15 @@ pub fn start(mode: AudioMode, track: Arc<TrackLocalStaticSample>) -> ProcAudio {
                 for (m, v) in mix.iter_mut().zip(r.drain(..FRAME * 2)) { *m += v; }
                 any = true;
             }
-            if !any { continue; } // silêncio: não envia nada (DTX de fato)
-            for v in mix.iter_mut() { *v = v.clamp(-1.0, 1.0); peak = peak.max(v.abs()); }
+            if any { for v in mix.iter_mut() { *v = v.clamp(-1.0, 1.0); peak = peak.max(v.abs()); } }
+            // o nível sai a cada segundo também no silêncio (senão o painel ficaria com o último valor para sempre)
             if peak_t.elapsed() > Duration::from_secs(1) { sts.peak_milli.store((peak * 1000.0) as u64, Ordering::Relaxed); peak = 0.0; peak_t = Instant::now(); }
+            if !any { continue; } // silêncio: não envia nada (DTX de fato)
             if let Ok(n) = enc.encode_float(&mix, &mut out) { let _ = tx.send(out[..n].to_vec()); sts.frames.fetch_add(1, Ordering::Relaxed); }
         }
         for s in srcs.values() { s.stop.store(true, Ordering::Relaxed); }
     });
-    ProcAudio { stop, mode, muted, stats }
+    ProcAudio { stop, mode, muted, rescan, stats }
 }
 
 #[cfg(test)]
@@ -290,6 +307,30 @@ mod tests {
         let f3 = pa.stats.frames.load(Ordering::Relaxed);
         assert!(f3 > f2 + 5, "desmutado volta a sair ({f2} -> {f3})");
         pa.stop();
+    }
+
+    /// 1.6: o nível do áudio transmitido aparece enquanto toca e volta a zero quando para (o painel avisa "não está tocando nada").
+    #[tokio::test(flavor = "multi_thread")]
+    async fn level_follows_the_audio_and_drops_to_zero_in_silence() {
+        let pa = start(AudioMode::TestBeep, new_audio_track());
+        tokio::time::sleep(Duration::from_millis(2300)).await;
+        assert!(pa.stats.peak_milli.load(Ordering::Relaxed) > 100, "com som o nível sobe");
+        pa.set_mode(AudioMode::None);   // troca ao vivo: só o áudio muda, a faixa e o laço seguem
+        tokio::time::sleep(Duration::from_millis(2600)).await;
+        assert_eq!(pa.stats.peak_milli.load(Ordering::Relaxed), 0, "sem som o nível cai a zero");
+        let f = pa.stats.frames.load(Ordering::Relaxed);
+        pa.set_mode(AudioMode::TestBeep);
+        tokio::time::sleep(Duration::from_millis(900)).await;
+        assert!(pa.stats.frames.load(Ordering::Relaxed) > f + 5, "voltar a um modo com som retoma os quadros sem reiniciar");
+        pa.stop();
+    }
+
+    #[test]
+    fn process_loopback_support_matches_the_windows_build() {
+        let b = windows_build();
+        eprintln!("build do Windows: {b}");
+        assert!(b > 0);
+        assert_eq!(process_loopback_supported(), b >= 20348);
     }
 
     #[test]

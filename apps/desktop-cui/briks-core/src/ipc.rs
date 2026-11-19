@@ -185,6 +185,7 @@ pub fn install_identity(dir: &std::path::Path, id: &Identity) -> Result<()> {
 fn audio_mode(v: &Value, kind: &crate::capture::SourceKind) -> crate::procaudio::AudioMode {
     use crate::procaudio::AudioMode;
     match v["audio"].as_str().unwrap_or("none") {
+        "all" => AudioMode::AllExcept,   // "tudo menos a chamada do Briks" (e o Discord), qualquer que seja a fonte
         "apps" => AudioMode::Pids(v["pids"].as_array().map(|a| a.iter().filter_map(|p| p.as_u64().map(|p| p as u32)).collect()).unwrap_or_default()),
         "source" => match kind { crate::capture::SourceKind::Window(h) => match crate::capture::window_pid(*h) { 0 => AudioMode::None, p => AudioMode::Tree(p) }, _ => AudioMode::AllExcept },
         _ => AudioMode::None,
@@ -790,7 +791,7 @@ async fn handle(s: TcpStream, token: &str, cfg: &Config, accounts: Arc<crate::ac
                     }
                     "share.audio.list" => {
                         let apps = tokio::task::spawn_blocking(crate::procaudio::list_apps).await.unwrap_or_default();
-                        out(&mut wr, json!({ "ev": "share.audio.apps", "apps": apps })).await?;
+                        out(&mut wr, json!({ "ev": "share.audio.apps", "apps": apps, "supported": crate::procaudio::process_loopback_supported(), "build": crate::procaudio::windows_build() })).await?;
                     }
                     "share.audio.set" => {
                         // ao vivo: "source" precisa saber a fonte (janela = árvore do app dela; tela = tudo menos Briks/Discord); a UI manda kind+id
