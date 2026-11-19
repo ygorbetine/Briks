@@ -1,0 +1,13 @@
+# Board: grade pontilhada de fundo nos temas escuro e claro
+waitms 1500
+click 700 35
+waitms 600
+shot g_escuro_off
+click 1035 109
+waitms 400
+shot g_claro_ou_escuro
+mat 640 380
+waitms 200
+wheel 3
+waitms 500
+shot g_zoom

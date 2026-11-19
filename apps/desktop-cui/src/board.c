@@ -143,6 +143,17 @@ static void paint_bg(cui_ctx *ui, cui_rect r, void *u) {
     cui_push_clip(ui, r);
     cui_draw_shadow(ui, pg, CUI_CORNERS(6), 24.0f, 0.0f, (cui_vec2){ 0, 6 }, CUI_RGBA(0x00000070));
     cui_draw_rect(ui, pg, CUI_CORNERS(6), b->dark ? CUI_RGB(0x1b1b24) : CUI_RGB(0xfafafa));
+    {   /* grade pontilhada suave (só na tela: a exportação em PNG sai limpa); acompanha o zoom e some quando os pontos ficariam colados */
+        const float step = 40.0f * pg.w / (float)PAGE_W, rad = fmaxf(0.8f, step * 0.045f);
+        if (step >= 7.0f) {
+            const cui_color dc = b->dark ? CUI_RGBA(0xffffff22) : CUI_RGBA(0x00000028);
+            const float m = 6.0f + rad + 1.0f;   /* margem: nenhum ponto toca a borda nem os cantos arredondados do retângulo */
+            const float x0 = fmaxf(pg.x + m, r.x + rad), x1 = fminf(pg.x + pg.w - m, r.x + r.w - rad), y0 = fmaxf(pg.y + m, r.y + rad), y1 = fminf(pg.y + pg.h - m, r.y + r.h - rad);
+            int ix = (int)ceilf((x0 - pg.x) / step), iy0 = (int)ceilf((y0 - pg.y) / step);
+            for (; pg.x + ix * step < x1; ix++) for (int iy = iy0; pg.y + iy * step < y1; iy++)
+                cui_draw_circle(ui, (cui_vec2){ pg.x + ix * step, pg.y + iy * step }, rad, dc);
+        }
+    }
     cui_pop_clip(ui);
 }
 
