@@ -33,9 +33,10 @@ Nenhum segredo vai para o app nem para o git: a chave e o segredo do LiveKit fic
 ### 1. Escolha o servidor de chamadas
 - **LiveKit Cloud** (mais fácil): crie conta e projeto em livekit.io; anote `wss://SEU-PROJETO.livekit.cloud`, API Key e API Secret.
   Confira no site o plano grátis atual (minutos de participante, banda e nº de conexões simultâneas) e o preço depois do limite: muda com o tempo.
-- **VPS própria** (custo fixo, mais trabalho): `infrastructure/livekit/` (Docker). Gere as chaves (`docker run --rm livekit/generate`),
-  ponha no `livekit.yaml`, abra 7880/tcp, 7881/tcp, 3478/udp, 5349/tcp e 50000-50200/udp e coloque TLS na frente para ter `wss://`.
-  Confira banda mensal da VPS: vídeo em SFU gasta upload do servidor por espectador.
+- **VPS própria** (custo fixo; é o caminho recomendado depois que a cota do LiveKit Cloud acabou): `infrastructure/livekit/README.md`.
+  Um script (`instalar.sh`) instala LiveKit + Caddy (HTTPS automático), gera as chaves e abre o firewall. Depois é só rodar o
+  `ativar-sfu.ps1` abaixo com a nova URL/Key/Secret: o app pega a URL nova pela função de tokens, **sem lançar versão nova**.
+  Confira a banda mensal da VPS: vídeo em SFU gasta upload do servidor por espectador (~1,8 GB/h por espectador em 720p).
 
 ### 2. Rode o assistente (só para refazer/rotacionar: o servidor atual já está configurado) (no SEU terminal, na raiz do repositório)
 ```powershell

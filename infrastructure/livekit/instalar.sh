@@ -33,7 +33,7 @@ mkdir -p "$DIR"; cd "$DIR"
 if [ -f credenciais.txt ]; then
   KEY="$(sed -n 's/^API_KEY=//p' credenciais.txt)"; SECRET="$(sed -n 's/^API_SECRET=//p' credenciais.txt)"; echo "Chaves ja existiam: mantidas."
 else
-  KEY="API$(openssl rand -hex 7)"; SECRET="$(openssl rand -base64 48 | tr -d '/+=\n' | head -c 48)"
+  KEY="API$(openssl rand -hex 7)"; SECRET="$(openssl rand -hex 24)"
   umask 077; printf 'URL=wss://%s\nAPI_KEY=%s\nAPI_SECRET=%s\n' "$DOM" "$KEY" "$SECRET" > credenciais.txt; umask 022
 fi
 cat > livekit.yaml <<EOF
