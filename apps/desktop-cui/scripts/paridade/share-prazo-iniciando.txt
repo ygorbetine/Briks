@@ -1,0 +1,8 @@
+# Iniciando... tem prazo: sem o 1o quadro a tentativa e cancelada e aparece o erro em portugues (BRIKS_DEV_STARTING + BRIKS_START_TIMEOUT_MS=1500)
+waitms 500
+expect share_starting 1
+expect share_err 0
+waitms 3000
+expect share_starting 0
+expect share_err 1
+shot ip1

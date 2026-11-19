@@ -705,7 +705,7 @@ void groups_sidebar(cui_ctx *ui, app_state_t *s, int gi) {   /* canais do grupo 
                 else if (briks_clicked(ui, "ch")) select_channel(s, gi, i);
                 if (g->ch[i].voice) {   /* quem está na sala de voz, com ponto verde, "Ao vivo" e Assistir (ver roster_get para a origem dos dados) */
                     rmem_t who[8]; bool mine; const int nw = roster_get(s, &g->ch[i], who, &mine);
-                    bool watch = false;
+                    bool watch = false; int wwho = -1;
                     if (nw) cui_box(ui, .width = CUI_FILL, .pad_left = 20, .gap = 3) {
                         for (int w = 0; w < nw; w++) {
                             cui_push_id_int(ui, 100 + w);
@@ -718,7 +718,7 @@ void groups_sidebar(cui_ctx *ui, app_state_t *s, int gi) {   /* canais do grupo 
                                 if (who[w].live) cui_box(ui, .dir = CUI_ROW, .gap = 8) {
                                     cui_text(ui, "AO VIVO", .size = 10, .color = B_C3, .nowrap = true);
                                     cui_box(ui, .id = "wt", .pad_x = 8, .pad_y = 2, .radius = 9, .bg = B_A(B_C1, 0x55)) { cui_text(ui, "Assistir", .size = 11, .nowrap = true); }
-                                    if (briks_clicked_r(ui, "wt", 9.0f)) watch = true;
+                                    if (briks_clicked_r(ui, "wt", 9.0f)) { watch = true; wwho = w; }
                                 }
                             }
                             cui_pop_id(ui);
@@ -726,7 +726,7 @@ void groups_sidebar(cui_ctx *ui, app_state_t *s, int gi) {   /* canais do grupo 
                         { const rroster_t *rr = mine ? NULL : ros_slot(g->ch[i].room[0] ? g->ch[i].room : g->ch[i].id, false);
                           if (rr && rr->more > 0) cui_textf(ui, "+%d na sala", rr->more); }
                     }
-                    if (watch) { s->screen = SCREEN_CALL; s->call_mode = 1; s->call_view = 0; }
+                    if (watch) { char wroom[96]; snprintf(wroom, sizeof wroom, "g-%s", g->ch[i].room); share_watch_member(s, wroom, who[wwho].name); }
                 }
                 cui_pop_id(ui);
             }

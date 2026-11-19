@@ -413,6 +413,7 @@ void ui_share_dialog(cui_ctx *ui, app_state_t *s);            /* "Compartilhar t
 void ui_share_bar(cui_ctx *ui, app_state_t *s);               /* botão Compartilhar + chips de áudio e qualidade */
 int share_probe(const char *name, const app_state_t *s);      /* estados para os roteiros de teste; -9999 = desconhecido */
 bool share_notice_active(cui_ctx *ui, app_state_t *s);       /* há aviso "X começou a transmitir" para mostrar */
+void share_watch_member(app_state_t *s, const char *room, const char *name);   /* Assistir na lista de membros: entra na sala e abre a transmissão dessa pessoa */
 void ui_share_notice_row(cui_ctx *ui, app_state_t *s);        /* a linha do aviso, com o botão Assistir */
 bool ui_share_stage(cui_ctx *ui, app_state_t *s, float W, float H, int layout);             /* palco do modo Transmissão; false = ninguém transmitindo */
 bool share_peer_live(const app_state_t *s, int slot);
