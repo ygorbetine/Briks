@@ -6,9 +6,9 @@
 #include <stdlib.h>
 enum { IDLE_ACTIVE = 0, IDLE_WARNING = 1, IDLE_EXPIRED = 2 };
 static inline long long idle_limit_ms(void) { const char *e = getenv("BRIKS_IDLE_LIMIT_S"); return e && atoi(e) > 0 ? (long long)atoi(e) * 1000 : 3600000LL; }
-static inline long long idle_warn_ms(void) { const char *e = getenv("BRIKS_IDLE_WARN_S"); return e && atoi(e) > 0 ? (long long)atoi(e) * 1000 : 300000LL; }
+static inline long long idle_warn_ms(void) { const char *e = getenv("BRIKS_IDLE_WARN_S"); return e && atoi(e) > 0 ? (long long)atoi(e) * 1000 : 60000LL; }
 /* CHM-35 (1.4.3): o prazo vem de Configurações > Voz e vídeo (minutos; 0 = nunca desconectar). BRIKS_IDLE_LIMIT_S continua mandando nos testes.
- * Devolve 0 para "nunca". O aviso é de 5 min, mas nunca passa de 1/3 do prazo (prazo de 15 min avisa aos 5; de 5 min avisaria aos ~1:40). */
+ * Devolve 0 para "nunca". O aviso é de 1 min, mas nunca passa de 1/3 do prazo (prazo de 2 min avisaria aos ~40 s). */
 static inline long long idle_limit_for(int cfg_minutes) {
     const char *e = getenv("BRIKS_IDLE_LIMIT_S"); if (e && atoi(e) > 0) return (long long)atoi(e) * 1000;
     if (cfg_minutes <= 0) return 0;

@@ -20,11 +20,11 @@ static void idle_tests(void) {
     OK(idle_limit_for(0) == 0 && idle_phase_lim(99999999LL, 0, &rem) == IDLE_ACTIVE, "inatividade: 'Nunca' nunca expira");
     OK(idle_limit_for(60) == 3600000LL && idle_limit_for(15) == 900000LL, "inatividade: prazos de 15 min e 1 h");
     OK(idle_phase_lim(0, 3600000LL, &rem) == IDLE_ACTIVE && rem == 3600000LL, "inatividade: recém-falou, ativo");
-    OK(idle_phase_lim(3600000LL - 299000LL, 3600000LL, &rem) == IDLE_WARNING && rem == 299000LL, "inatividade: avisa nos 5 min finais");
+    OK(idle_phase_lim(3600000LL - 59000LL, 3600000LL, &rem) == IDLE_WARNING && rem == 59000LL, "inatividade: avisa no último minuto");
     OK(idle_phase_lim(3600000LL, 3600000LL, &rem) == IDLE_EXPIRED && rem == 0, "inatividade: no prazo, expira");
-    OK(idle_phase_lim(4 * 60000LL, 15 * 60000LL, &rem) == IDLE_ACTIVE, "inatividade: 15 min, aos 4 min ainda ativo");
-    OK(idle_phase_lim(11 * 60000LL, 15 * 60000LL, &rem) == IDLE_WARNING, "inatividade: 15 min, aos 11 min avisa");
-    OK(idle_phase_lim(0, 6 * 60000LL, &rem) == IDLE_ACTIVE && idle_phase_lim(4 * 60000LL, 6 * 60000LL, &rem) == IDLE_WARNING, "inatividade: prazo curto avisa em 1/3 (nunca desde o início)");
+    OK(idle_phase_lim(13 * 60000LL, 15 * 60000LL, &rem) == IDLE_ACTIVE, "inatividade: 15 min, aos 13 min ainda ativo");
+    OK(idle_phase_lim(14 * 60000LL + 1000, 15 * 60000LL, &rem) == IDLE_WARNING, "inatividade: 15 min, aos 14:01 avisa");
+    OK(idle_phase_lim(0, 90000LL, &rem) == IDLE_ACTIVE && idle_phase_lim(65000LL, 90000LL, &rem) == IDLE_WARNING, "inatividade: prazo curto avisa em 1/3 (nunca desde o início)");
 }
 
 int main(void) {

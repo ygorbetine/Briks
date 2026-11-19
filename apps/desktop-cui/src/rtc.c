@@ -400,7 +400,8 @@ static void idle_tick(app_state_t *s) {
     const ULONGLONG now = GetTickCount64();
     if (!s->in_room) { s->idle_last = 0; s->idle_phase_now = IDLE_ACTIVE; return; }
     bool watching = false; if (s->call_mode == 1) for (int i = 0; i < BRIKS_MAX_PEERS; i++) if (share_peer_live(s, i)) watching = true;   /* assistir a uma transmissão também conta como presença */
-    if (!s->idle_last || (s->mic_on && s->me_level > 0.05f) || s->sh.active || watching) s->idle_last = now;
+    bool others = false; for (int i = 0; i < BRIKS_MAX_PEERS; i++) if (s->rtc_peers[i].id[0] && s->rtc_peers[i].level > 0.05f) others = true;   /* ninguém falando: sozinho ou sala calada */
+    if (!s->idle_last || (s->mic_on && s->me_level > 0.05f) || others || s->sh.active || watching) s->idle_last = now;
     const long long lim = idle_limit_for(settings_idle_min());
     long long rem = 0; int ph = idle_phase_lim((long long)(now - s->idle_last), lim, &rem);
     s->idle_phase_now = ph; s->idle_left_ms = rem;

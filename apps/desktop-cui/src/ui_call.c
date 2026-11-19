@@ -968,7 +968,7 @@ void ui_call(cui_ctx *ui, app_state_t *s) {
     if (s->screen != SCREEN_CALL && g_call.fullscreen) call_set_fullscreen(s, false);   /* saiu da tela da chamada: a janela volta ao normal */
 }
 
-/* CHM-16: aviso nos 5 minutos finais antes de sair por inatividade (e o resultado depois que saiu) */
+/* CHM-16: aviso no último minuto antes de sair por inatividade (e o resultado depois que saiu) */
 void idle_banner(cui_ctx *ui, app_state_t *s) {
     if (s->idle_phase_now != IDLE_WARNING) {
         if (s->idle_notice[0] && s->screen != SCREEN_CALL) cui_box(ui, .width = CUI_FILL, .height = CUI_FILL, .align = CUI_ALIGN_CENTER, .justify = CUI_JUSTIFY_START, .pad_top = 8, .pad_x = 8) {
@@ -980,7 +980,7 @@ void idle_banner(cui_ctx *ui, app_state_t *s) {
         return;
     }
     const long long sec = (s->idle_left_ms + 999) / 1000;
-    char t[160]; snprintf(t, sizeof t, "Você está há muito tempo sem falar. A chamada será encerrada em %lld:%02lld.", sec / 60, sec % 60);
+    char t[160]; snprintf(t, sizeof t, "Você será desconectado por inatividade em %lld:%02lld.", sec / 60, sec % 60);
     cui_rect pr = cui_get_rect(ui, cui_make_id(ui, "idle-pill"));
     if (pr.w > 0) briks_cover(pr.x, pr.y, pr.w, pr.h);
     cui_box(ui, .width = CUI_FILL, .height = CUI_FILL, .align = CUI_ALIGN_CENTER, .justify = CUI_JUSTIFY_START, .pad_top = 82, .pad_x = 8) {

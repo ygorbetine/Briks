@@ -518,7 +518,7 @@ void settings_dialog(cui_ctx *ui, app_state_t *s) {
                         cui_text(ui, "Sair da chamada depois de ficar sem falar", .size = 12, .color = B_MUTED);
                         const int before = k; seg(ui, "cfg-idle", IDL, 5, &k);
                         if (k != before) g_set.idle_min = IDM[k];
-                        sub(ui, g_set.idle_min ? "Faltando 5 minutos (ou 1/3 do prazo) aparece um aviso com o botão Continuar. Falar, transmitir a tela ou assistir a uma transmissão zera a contagem. Vale na hora." : "Você só sai da chamada quando decidir sair.");
+                        sub(ui, g_set.idle_min ? "No último minuto (ou 1/3 do prazo) aparece um aviso com o botão Continuar. Falar, transmitir a tela ou assistir a uma transmissão zera a contagem. Vale na hora." : "Você só sai da chamada quando decidir sair.");
                     }
                     break;
                 case 1: { /* Rede */
