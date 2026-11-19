@@ -2,6 +2,19 @@
 
 Data: 2026-11-19. Branch `bsod-testes`. O PC do dono desligou com tela azul durante testes; existe o minidump `C:\Windows\Minidumps\111826-10828-01.dmp` (18/11/2026). Ler esse arquivo exige administrador, então **o dono precisa rodar os comandos da seção 2**. Tudo aqui foi feito **por leitura**: nenhum teste de GPU, captura ou janela real foi executado.
 
+## 0. RESULTADO DO MINIDUMP (lido em 2026-11-19, com o dono elevando o PowerShell)
+
+**O culpado é o driver `vjoy.sys` (joystick virtual vJoy, de 14/07/2019), não o Briks nem a GPU.** O que aparece nos dois dumps de 18/11 (11:37 e 23:09, mais um de 10/11):
+
+- Código de parada **`0x3B SYSTEM_SERVICE_EXCEPTION`**, parâmetro `0xC0000005` (violação de acesso), nos dois, no **mesmo ponto: `vjoy+0x4bc3`** (`FAILURE_BUCKET_ID: AV_vjoy!unknown_function`).
+- Evento 1019 do Windows: "Driver possivelmente relacionado: vjoy.sys".
+- Processo em execução na queda: **`find.exe`** (utilitário do Windows; nenhum processo do Briks, `cargo` ou binário de teste). Sem eventos WHEA; nenhum Display/TDR perto das horas (só dois eventos 153 do `nvlddmkm`, às 17/11 17:20 e 18/11 01:04, sem queda).
+- O driver está instalado e rodando (`vjoy`, StartMode Manual, `C:\WINDOWS\system32\driversjoy.sys`). O Briks não usa joystick/vJoy (nenhuma referência no código).
+
+Conclusão: o mesmo bug do vJoy derrubou o PC duas vezes no mesmo dia, em horários diferentes, e `find.exe` é só o processo que estava ativo. Algo (jogo, navegador, Steam, outro programa) enumerou/leu dispositivos de joystick. **Não há prova de que um teste do Briks tenha causado a tela azul**; as proteções da seção 3 continuam valendo como prudência (a hipótese do NVENC da seção 1 fica rebaixada para "risco teórico", ~10%). O "culpado provável" da seção 1 foi escrito antes de ler o dump e está **superado por este resultado**.
+
+**O que o dono deve fazer:** atualizar para o vJoy mais novo (2.1.9.1) ou **desinstalar o vJoy** se não usa (Configurações > Aplicativos > "vJoy Device Driver"). Se precisar dele, evite deixar o dispositivo habilitado sem uso. Reiniciar depois. Se a tela azul voltar com `vjoy.sys` de novo, é confirmação.
+
 ## 1. Triagem por leitura (o que pode derrubar o driver de vídeo)
 
 Já estava anotado no repositório que "a máquina já teve tela azul com NVENC" (`docs/plans/plano-pos-1.3.0.md`, `transmissao-boas-praticas.md`, `briks-core/src/robust.rs`). O que as sessões faziam para se proteger era só um combinado (lock `A:\BRiskCall\.gpu-test.lock` e variáveis de ambiente), nada era imposto pelo código.
@@ -25,7 +38,7 @@ Já estava anotado no repositório que "a máquina já teve tela azul com NVENC"
 
 Padrões que travam driver de vídeo, encontrados: **(a)** várias sessões de encoder de hardware ao mesmo tempo (item 1); **(b)** criar e destruir encoder em laço (5); **(c)** captura + conversão D3D11 + NVENC ao mesmo tempo (4); **(d)** janela topmost do tamanho do monitor redesenhada a 15 ms (8); **(e)** `Start-Process -Wait` sem prazo (11). Não achei `SetWindowPos` em laço sem folga nos testes (o overlay chama uma vez por atualização).
 
-### Provável culpado
+### Provável culpado (hipótese anterior ao dump: SUPERADA, ver seção 0)
 **Item 1/2: o `cargo test` padrão abrindo o codificador de hardware (NVENC) em vários testes ao mesmo tempo, mais o teste novo do "Testar meu PC".** Grau de certeza: **médio (~60%)**, por circunstâncias: já havia tela azul anterior com NVENC; o `probe` foi criado em 18/11 à noite, mesma data do minidump; e na hora havia várias sessões rodando `cargo test`/paridade ao mesmo tempo. **Não está confirmado**: só o minidump diz (seção 2). O segundo candidato (~25%) é o tremor de tela real (`BRIKS_NUDGE_REAL`), também de 18/11 à noite; o resto é pouco provável.
 
 ## 2. Instruções para o dono (PowerShell como **Administrador**)
