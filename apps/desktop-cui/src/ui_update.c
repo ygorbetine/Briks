@@ -69,6 +69,12 @@ void update_dialog(cui_ctx *ui, app_state_t *s) {
 
 typedef struct { const char *version; const char *items[14]; } notes_t;
 static const notes_t NOTES[] = {
+    { "1.6.1", {
+        "Chamada: o modo Direto (ponto a ponto) passa a ser o padrão, para gastar menos do servidor de chamadas. Quem já escolheu outro modo em Configurações > Rede continua com a escolha. Todos da sala precisam estar no mesmo modo.",
+        "Transmissão: 720p passa a ser a qualidade padrão.",
+        "Board: a barra de ferramentas voltou a responder aos cliques (também nas anotações sobre a transmissão).",
+        "Board: novo botão Apagar página e fundo com grade pontilhada suave.",
+        NULL } },
     { "1.6.0", {
         "Chamada individual: o botão Ligar no perfil do amigo abre uma sala só de vocês dois, sem precisar de grupo. O amigo recebe um cartão para atender ou recusar.",
         "Convites de grupo: agora chegam também por um sinal direto entre amigos, além da mensagem. O convite mostra se está aguardando, foi entregue ou não chegou.",
