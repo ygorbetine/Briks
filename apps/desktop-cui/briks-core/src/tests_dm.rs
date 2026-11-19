@@ -192,3 +192,21 @@ async fn dm_attachment_waits_in_the_local_queue_then_transfers_after_the_friend_
     assert_eq!(a.count(|v| v["kind"] == "queued"), before, "fila vazia depois de entregar");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_signal_sent_by_ipc_reaches_the_inbox_and_stop_withdraws_it() {
+    let port = crate::mock::start(0).await.unwrap();
+    let (mut a, mut b) = (app("sa", port, "Ana").await, app("sb", port, "Beto").await);
+    let ub = "22222222-bbbb-4bbb-8bbb-000000000002";
+    b.send(json!({ "cmd": "dm.inbox", "user_id": ub })).await;
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    // dados inválidos: não envia
+    a.send(json!({ "cmd": "dm.signal", "user_id": ub, "kind": "xyz", "key": "k0", "data": {} })).await;
+    a.wait(10, "recusa do tipo inválido", |v| v["ev"] == "dm.signal.sent" && v["key"] == "k0" && v["ok"] == false).await;
+    a.send(json!({ "cmd": "dm.signal", "user_id": ub, "kind": "call", "key": "k1", "hold_s": 45, "data": { "room": "dm-teste", "name": "Ana" } })).await;
+    a.wait(10, "dm.signal.sent", |v| v["ev"] == "dm.signal.sent" && v["key"] == "k1" && v["ok"] == true).await;
+    let s = b.wait(15, "dm.signal em B", |v| v["ev"] == "dm.signal").await;
+    assert_eq!((s["fp"].as_str(), s["kind"].as_str(), s["data"]["room"].as_str()), (Some(a.fp.as_str()), Some("call"), Some("dm-teste")));
+    a.send(json!({ "cmd": "dm.signal.stop", "key": "k1" })).await;
+    b.wait(30, "dm.signal.gone em B", |v| v["ev"] == "dm.signal.gone" && v["data"]["room"] == "dm-teste").await;
+}

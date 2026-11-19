@@ -11,6 +11,7 @@
 //! mensagens só passa pelo canal direto autenticado. Nada fica guardado no servidor: se o amigo está offline, a mensagem espera na
 //! caixa de saída DESTE computador (e no histórico assinado local) e segue quando os dois estiverem online; o toque some quando o
 //! canal direto abre, quando a conversa é fechada ou quando o Briks fecha.
+use crate::identity::{self, Identity, PublicJwk};
 use crate::realtime::{self, Realtime, RealtimeCfg, RtEvent};
 use crate::signaling::{secure_room_id, topic_name};
 use serde_json::{json, Value};
@@ -38,12 +39,63 @@ pub fn read_knock(meta: &Value, my_fp: &str) -> Option<String> {
 pub fn poke_meta() -> Value { json!({ "poke": true }) }
 pub fn is_poke(meta: &Value) -> bool { meta["poke"].as_bool() == Some(true) }
 
+/// Sinais assinados na caixa de chegada (1.6): "call" (estou ligando; dados {room, name}), "ginv" (convidei você para um grupo; {gid, name}).
+/// Vão como metadado de presença, junto com a chave pública e a assinatura de quem enviou: o receptor confere que a impressão digital é da chave,
+/// que a assinatura vale e que o sinal foi feito PARA a conta dele e há pouco tempo. Quem não é amigo ainda é descartado pela interface.
+pub const SIG_KINDS: [&str; 2] = ["call", "ginv"];
+pub const SIG_MAX_AGE_MS: u64 = 15 * 60 * 1000;
+pub fn signal_canonical(kind: &str, data: &str, ts: u64, to_user: &str) -> String { format!("briks-sig1|{kind}|{data}|{ts}|{to_user}") }
+pub fn signal_meta(id: &Identity, kind: &str, data: &Value, ts: u64, to_user: &str) -> Value {
+    let d = data.to_string();
+    let s = id.sign(&signal_canonical(kind, &d, ts, to_user));
+    json!({ "fp": id.fingerprint(), "sig": { "k": kind, "d": d, "ts": ts }, "jwk": id.public_jwk(), "s": s })
+}
+/// Lê e confere um sinal: (impressão digital de quem enviou, tipo, dados). None se qualquer verificação falha.
+pub fn read_signal(meta: &Value, my_fp: &str, my_user: &str, now: u64) -> Option<(String, String, Value)> {
+    let fp = meta["fp"].as_str()?;
+    let (kind, d, ts) = (meta["sig"]["k"].as_str()?, meta["sig"]["d"].as_str()?, meta["sig"]["ts"].as_u64()?);
+    if !valid_fp(fp) || fp == my_fp || !SIG_KINDS.contains(&kind) || d.len() > 1024 || now.abs_diff(ts) > SIG_MAX_AGE_MS { return None; }
+    let jwk: PublicJwk = serde_json::from_value(meta["jwk"].clone()).ok()?;
+    if identity::fingerprint(&jwk) != fp || !identity::verify(&jwk, &signal_canonical(kind, d, ts, my_user), meta["s"].as_str()?) { return None; }
+    let data: Value = serde_json::from_str(d).ok().filter(|v: &Value| v.is_object())?;
+    Some((fp.to_string(), kind.to_string(), data))
+}
+/// Envia um sinal: entra na caixa de `to_user` com o sinal na presença e fica `hold` (o receptor que abrir o Briks nesse tempo ainda vê).
+/// Devolve a conexão: fechá-la antes retira o sinal (o receptor recebe `dm.signal.gone`).
+pub fn send_signal(cfg: RealtimeCfg, to_user: &str, meta: Value, hold: std::time::Duration) -> Realtime {
+    let (rt, mut rx) = realtime::connect(cfg, inbox_topic(to_user), uuid::Uuid::new_v4().to_string(), meta);
+    let rt2 = rt.clone();
+    tokio::spawn(async move {
+        let drain = async { while rx.recv().await.is_some() {} };
+        let _ = tokio::time::timeout(hold, drain).await;
+        rt2.close().await;
+    });
+    rt
+}
+
 /// Observa a minha caixa e emite `{"ev":"dm.wake","fp":...}` para cada toque e `{"ev":"friends.poke"}` para cada aviso de lista.
 pub fn watch_inbox(cfg: RealtimeCfg, my_user_id: &str, my_fp: String, tx: mpsc::Sender<Value>) -> Realtime {
     let (rt, mut rx) = realtime::connect(cfg, inbox_topic(my_user_id), uuid::Uuid::new_v4().to_string(), json!({ "inbox": true }));
+    let my_user = my_user_id.to_string();
     tokio::spawn(async move {
         let mut last_poke: Option<std::time::Instant> = None;
+        let mut live: std::collections::HashMap<String, (String, String, Value)> = Default::default();   // peer_id -> sinal que ele mostrava (para avisar quando some)
         while let Some(e) = rx.recv().await {
+            if let RtEvent::PeerLeft(pid) = &e {
+                if let Some((fp, kind, data)) = live.remove(pid) { if tx.send(json!({ "ev": "dm.signal.gone", "fp": fp, "kind": kind, "data": data })).await.is_err() { return; } }
+                continue;
+            }
+            if let RtEvent::PeerJoined { peer_id, meta } = &e {
+                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+                if let Some((fp, kind, data)) = read_signal(meta, &my_fp, &my_user, now) {
+                    crate::netlog::write(&format!("sinal {kind} recebido de {}", &fp[..fp.len().min(8)]));
+                    if live.len() < 64 && live.insert(peer_id.clone(), (fp.clone(), kind.clone(), data.clone())).is_none() {
+                        if tx.send(json!({ "ev": "dm.signal", "fp": fp, "kind": kind, "data": data })).await.is_err() { return; }
+                    }
+                    continue;
+                }
+                if meta["sig"].is_object() { crate::netlog::write("sinal descartado: assinatura, destinatario ou idade invalidos"); continue; }
+            }
             if let RtEvent::PeerJoined { meta, .. } = e {
                 if is_poke(&meta) {
                     // no máx. 1 aviso a cada 1,5 s (quem não é amigo só consegue fazer a UI refazer uma consulta ao servidor)
@@ -115,5 +167,60 @@ mod t {
         assert_eq!(read_knock(&json!({ "fp": "a".repeat(73), "knock": true }), "x"), None);
         assert_eq!(read_knock(&json!({ "inbox": true }), "x"), None);
         assert!(valid_id("abc-123_x") && !valid_id("a b") && !valid_id(""));
+    }
+
+    fn now_ms() -> u64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0) }
+
+    #[test]
+    fn a_signal_is_checked_for_signature_recipient_age_and_sender() {
+        let id = Identity::generate();
+        let data = json!({ "room": "dm-abc", "name": "Ana" });
+        let meta = signal_meta(&id, "call", &data, now_ms(), "user-b");
+        let (fp, kind, d) = read_signal(&meta, "outro-fp", "user-b", now_ms()).expect("sinal válido");
+        assert_eq!((fp.as_str(), kind.as_str()), (id.fingerprint().as_str(), "call"));
+        assert_eq!(d, data);
+        assert!(read_signal(&meta, "outro-fp", "user-c", now_ms()).is_none(), "feito para outra conta");
+        assert!(read_signal(&meta, &id.fingerprint(), "user-b", now_ms()).is_none(), "o próprio sinal");
+        assert!(read_signal(&meta, "outro-fp", "user-b", now_ms() + SIG_MAX_AGE_MS + 5000).is_none(), "velho demais");
+        let mut bad = meta.clone(); bad["sig"]["d"] = json!("{\"room\":\"dm-outra\"}");
+        assert!(read_signal(&bad, "outro-fp", "user-b", now_ms()).is_none(), "dados adulterados");
+        let mut bad = meta.clone(); bad["fp"] = json!("ab12".repeat(16));
+        assert!(read_signal(&bad, "outro-fp", "user-b", now_ms()).is_none(), "fp que não é da chave");
+        let mut bad = meta.clone(); bad["sig"]["k"] = json!("ginv");
+        assert!(read_signal(&bad, "outro-fp", "user-b", now_ms()).is_none(), "tipo adulterado");
+        let other = signal_meta(&Identity::generate(), "call", &data, now_ms(), "user-b");
+        let mut bad = meta.clone(); bad["jwk"] = other["jwk"].clone();
+        assert!(read_signal(&bad, "outro-fp", "user-b", now_ms()).is_none(), "chave de outro");
+        assert!(read_signal(&signal_meta(&id, "xyz", &data, now_ms(), "user-b"), "o", "user-b", now_ms()).is_none(), "tipo desconhecido");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_signal_reaches_the_inbox_and_goes_away_when_withdrawn_and_forged_ones_are_dropped() {
+        let port = crate::mock::start(0).await.unwrap();
+        let cfg = || RealtimeCfg::new(&format!("ws://127.0.0.1:{port}"), "chave-de-teste");
+        let (tx, mut rx) = mpsc::channel::<Value>(16);
+        let mut icfg = cfg(); icfg.leave_grace = std::time::Duration::from_millis(200);
+        let _inbox = watch_inbox(icfg, "user-b", "ab12".repeat(16), tx);
+        tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+        let id = Identity::generate();
+        // para outra conta: o receptor descarta
+        let wrong = send_signal(cfg(), "user-b", signal_meta(&id, "call", &json!({ "room": "x" }), now_ms(), "user-z"), std::time::Duration::from_secs(30));
+        assert!(tokio::time::timeout(std::time::Duration::from_millis(1200), rx.recv()).await.is_err(), "sinal para outro destinatário deve ser descartado");
+        wrong.close().await;
+        // com a hora velha: descartado
+        let old = send_signal(cfg(), "user-b", signal_meta(&id, "call", &json!({ "room": "x" }), now_ms() - SIG_MAX_AGE_MS - 60_000, "user-b"), std::time::Duration::from_secs(30));
+        assert!(tokio::time::timeout(std::time::Duration::from_millis(1200), rx.recv()).await.is_err(), "sinal velho deve ser descartado");
+        old.close().await;
+        // válido: chega; fechar retira
+        let data = json!({ "room": "dm-1", "name": "Ana" });
+        let h = send_signal(cfg(), "user-b", signal_meta(&id, "call", &data, now_ms(), "user-b"), std::time::Duration::from_secs(30));
+        let ev = tokio::time::timeout(std::time::Duration::from_secs(10), rx.recv()).await.expect("o sinal não chegou").unwrap();
+        assert_eq!(ev["ev"], "dm.signal");
+        assert_eq!((ev["fp"].as_str().unwrap(), ev["kind"].as_str().unwrap()), (id.fingerprint().as_str(), "call"));
+        assert_eq!(ev["data"], data);
+        h.close().await;
+        let gone = tokio::time::timeout(std::time::Duration::from_secs(10), rx.recv()).await.expect("dm.signal.gone não veio").unwrap();
+        assert_eq!(gone["ev"], "dm.signal.gone");
+        assert_eq!(gone["data"], data);
     }
 }

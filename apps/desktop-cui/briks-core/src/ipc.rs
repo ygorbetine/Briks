@@ -265,6 +265,7 @@ async fn handle(s: TcpStream, token: &str, cfg: &Config, accounts: Arc<crate::ac
     let mut dm_links: std::collections::HashMap<String, DmLink> = Default::default();   // fp do amigo -> canal direto (DM sem sala de voz)
     let (dm_tx, mut dm_rx) = mpsc::channel::<(String, MeshEvent)>(256);
     let mut dm_seq = 0u64;
+    let mut signals: std::collections::HashMap<String, realtime::Realtime> = Default::default();   // sinais enviados (chamada/convite) key -> conexão; fechar retira o sinal
     let mut inbox: Option<realtime::Realtime> = None;   // a minha caixa de chegada: quem quer falar comigo aparece como dm.wake
     let mut identity: Option<Arc<Identity>> = None;
     let mut name = String::from("Usuário");
@@ -841,6 +842,31 @@ async fn handle(s: TcpStream, token: &str, cfg: &Config, accounts: Arc<crate::ac
                         let (Some(id), Some(url), Some(key)) = (identity.clone(), cfg.realtime_url.clone(), cfg.realtime_key.clone()) else { continue };
                         if crate::dmlink::valid_id(uid) { let items = crate::attachq::shared().lock().unwrap().list(); for e in items { let _ = out(&mut wr, queued_ev(&e, "")).await; } }
                         if crate::dmlink::valid_id(uid) { inbox = Some(crate::dmlink::watch_inbox(RealtimeCfg::new(&url, &key), uid, id.fingerprint(), ev_tx.clone())); }
+                    }
+                    // sinal assinado na caixa de chegada do amigo (chamada / convite de grupo): dmlink.rs
+                    "dm.signal" => {
+                        let (kind, key, to) = (v["kind"].as_str().unwrap_or(""), v["key"].as_str().unwrap_or("").to_string(), v["user_id"].as_str().unwrap_or(""));
+                        let (Some(id), Some(url), Some(rkey)) = (identity.clone(), cfg.realtime_url.clone(), cfg.realtime_key.clone()) else {
+                            crate::netlog::write(&format!("sinal {kind} nao enviado: sem identidade ou Realtime"));
+                            out(&mut wr, json!({ "ev": "dm.signal.sent", "key": key, "ok": false })).await?;
+                            continue;
+                        };
+                        if !crate::dmlink::SIG_KINDS.contains(&kind) || !crate::dmlink::valid_id(to) || key.is_empty() || key.len() > 96 || !v["data"].is_object() {
+                            crate::netlog::write(&format!("sinal {kind} nao enviado: dados invalidos"));
+                            out(&mut wr, json!({ "ev": "dm.signal.sent", "key": key, "ok": false })).await?;
+                            continue;
+                        }
+                        let hold = Duration::from_secs(v["hold_s"].as_u64().unwrap_or(45).clamp(5, 900));
+                        let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+                        let meta = crate::dmlink::signal_meta(&id, kind, &v["data"], ts, to);
+                        if let Some(old) = signals.remove(&key) { old.close().await; }
+                        if signals.len() >= 16 { if let Some(k) = signals.keys().next().cloned() { if let Some(o) = signals.remove(&k) { o.close().await; } } }
+                        crate::netlog::write(&format!("sinal {kind} enviado ({}s) chave {key}", hold.as_secs()));
+                        signals.insert(key.clone(), crate::dmlink::send_signal(RealtimeCfg::new(&url, &rkey), to, meta, hold));
+                        out(&mut wr, json!({ "ev": "dm.signal.sent", "key": key, "ok": true })).await?;
+                    }
+                    "dm.signal.stop" => {
+                        if let Some(old) = v["key"].as_str().and_then(|k| signals.remove(k)) { crate::netlog::write("sinal retirado"); old.close().await; }
                     }
                     "dm.open" => {
                         let fp = v["fp"].as_str().unwrap_or("").to_string();

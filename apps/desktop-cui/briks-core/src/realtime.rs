@@ -46,6 +46,7 @@ enum Out {
     Close,
 }
 
+#[derive(Clone)]
 pub struct Realtime {
     out: mpsc::Sender<Out>,
 }
