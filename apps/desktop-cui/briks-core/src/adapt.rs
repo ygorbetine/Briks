@@ -101,7 +101,17 @@ impl Estimator {
     pub fn set_ceil(&mut self, ceil: f64) { self.ceil = ceil; if self.est > ceil { self.est = ceil; } }
     pub fn rtt_base(&self) -> f32 { self.rtt_hist.iter().copied().fold(f32::MAX, f32::min) }
 
-    fn remember_cap(&mut self, now: Instant, c: f64) { self.cap = Some((c, now, 3.0)); }
+    /// Guarda a capacidade observada `c` (o que de fato chegou ao outro lado) no corte feito a partir de `before`. Voltar a bater
+    /// no mesmo teto (a estimativa subiu até perto dele e estourou de novo, depois de pelo menos 4 s, para não contar cortes em cascata do mesmo episódio, e em menos de 40 s) dobra o tempo em que ele fica firme,
+    /// até 12 s: numa rede que não mudou isso troca o dente de serra de ~10 s (estoura, corta, recria o codificador) por uma
+    /// sondagem rara. Um corte vindo de bem acima do teto antigo (a rede melhorou e piorou de novo) começa de novo em 3 s.
+    fn remember_cap(&mut self, now: Instant, c: f64, before: f64) {
+        let firm = match self.cap {
+            Some((pc, pt, pf)) if (4.0..40.0).contains(&now.saturating_duration_since(pt).as_secs_f64()) && c > pc * 0.6 && c < pc * 1.6 && before < pc * 1.6 => (pf * 2.0).min(12.0),
+            _ => 3.0,
+        };
+        self.cap = Some((c, now, firm));
+    }
 
     /// `sent` = bps realmente enviados no último segundo; `net` = pior espectador (None = sem relatórios);
     /// `nack_ratio` = pacotes pedidos de novo pela 1ª vez / pacotes enviados no último segundo.
@@ -150,14 +160,15 @@ impl Estimator {
             // recuperar: 0 qps), então ele nunca derruba a estimativa abaixo de metade num corte só, e dentro de 2,5 s do corte
             // anterior só uma perda extrema (> 30%) corta de novo, e só 25%.
             if cut_now && (since_cut >= 2.5 || (since_cut >= 0.9 && loss_eff > 0.30)) {
+                let before = self.est;
                 let passed = if using { sent * (1.0 - loss_eff as f64) } else { self.est * (1.0 - 0.5 * loss_eff as f64) };
                 // Fila comprovadamente cheia (atraso alto E perda > 30% medida agora pelos NACKs) com o emissor de fato enviando perto da
                 // estimativa: o que passou É a capacidade. Vai direto para lá (no máximo metade por corte) em vez de 25% por segundo —
                 // descer devagar deixava 5–7 s de envio acima do gargalo, e nesse tempo nenhum quadro-chave chegava inteiro.
                 let saturated = delayed && loss_eff > 0.30 && using && sent > self.est * 0.6;
-                let cut = if since_cut < 2.5 { if saturated { (passed * 0.9).max(self.est * 0.5) } else { self.est * 0.75 } } else { (passed * 0.9).max(self.est * 0.35) };
+                let cut = if since_cut < 2.5 { if saturated { (passed * 0.9).max(self.est * 0.5) } else { self.est * 0.75 } } else { (passed * if loss_eff > 0.35 { 0.8 } else { 0.9 }).max(self.est * 0.35) };
                 self.est = self.est.min(cut).max(FLOOR_BPS);
-                if using { self.remember_cap(now, self.est); }
+                if using { self.remember_cap(now, passed.max(self.est), before); }
                 self.last_cut = Some(now);
             }
             self.delay_cuts = 0;
@@ -172,8 +183,9 @@ impl Estimator {
                 } else {
                     self.first_cut_rtt = rtt;   // RTT no corte anterior: se o próximo não for maior, o atraso não está crescendo
                     let from = if using { self.est.min(sent.max(self.est * 0.5)) } else { self.est };
+                    let before = self.est;
                     self.est = (from * 0.85).max(FLOOR_BPS);
-                    if using { self.remember_cap(now, self.est); }
+                    if using { self.remember_cap(now, self.est, before); }
                     self.last_cut = Some(now); self.delay_cuts += 1;
                 }
             }
@@ -763,5 +775,95 @@ mod tests {
         let mut back = None;
         for i in 1..=6 { c.note_cpu(6.0, 10.0, 10.0, 0.0, 20.0); if c.decide(8_500_000.0).level == (Level { h: 1080, fps: 24 }) { back = Some(i); break; } }
         assert!(back.map(|i| i <= 4).unwrap_or(false), "recuperação lenta: {back:?}");
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Medição em malha fechada (estimador + controlador) contra um enlace de banda variável. Uso:
+    //   cargo test --lib adapt::tests::medida -- --nocapture
+    // Modelo do enlace: fila de 25% da capacidade por segundo, perda por estouro + perda aleatória, relatórios (RTT/perda) 2 s
+    // atrasados, NACK do segundo corrente, codificador obedecendo o pedido com 1 s de atraso.
+    // ---------------------------------------------------------------------------------------------------------------
+    struct Row { cap: f64, sent: f64, est: f64, level: usize, recreated: bool }
+
+    fn closed_loop(steps: &[(u64, f64, f64)], max_h: usize, fps: u32, base_rtt: f32) -> Vec<Row> {
+        let t0 = Instant::now();
+        let mut e = Estimator::new(auto_bitrate(max_h, fps) as f64);
+        let mut c = Controller::new(Content::Detail, max_h, fps, 0);
+        let (mut rows, mut backlog) = (vec![], 0.0f64);
+        let mut hist = vec![(0.0f32, base_rtt); 3];
+        let mut sent = e.est;
+        let mut t = 0u64;
+        // espelha o laço de share.rs: o codificador é recriado quando o nível (resolução) muda ou o pedido cai abaixo de 70% do que ele
+        // tem (no máximo uma vez a cada 2 s); o resto é ajuste ao vivo
+        let (mut enc_bps, mut last_level, mut last_rec) = (sent, 0usize, -10i64);
+        for (secs, cap, rand) in steps {
+            for _ in 0..*secs {
+                let arrive = sent + backlog;
+                let passed = arrive.min(*cap);
+                let over = (arrive - passed - cap * 0.25).max(0.0);
+                backlog = (arrive - passed).min(cap * 0.25);
+                let lost = (over / sent.max(1.0)) as f32 + *rand as f32;
+                let rtt = base_rtt + (backlog / cap * 1000.0) as f32;
+                hist.push((lost, rtt));
+                let old = hist[hist.len() - 3];
+                e.set_ceil(c.top_ceil());
+                let est = e.update(t0 + Duration::from_secs(t), sent * (1.0 - *rand), Some((old.0, old.1, 1.0)), lost);
+                let d = c.decide(est);
+                let want = d.bps as f64;
+                let mut rec = c.idx != last_level;
+                if want < enc_bps * 0.7 && t as i64 - last_rec >= 2 { rec = true; }
+                if rec { last_rec = t as i64; enc_bps = want; } else if (want - enc_bps).abs() / enc_bps > 0.05 { enc_bps = want; }
+                last_level = c.idx;
+                rows.push(Row { cap: *cap, sent, est, level: c.idx, recreated: rec });
+                sent = want;
+                t += 1;
+            }
+        }
+        rows
+    }
+    /// (segundos até o envio caber no enlace, segundos de estouro (> 110% da capacidade), segundos até chegar a 90% do que o enlace dá)
+    fn react(rows: &[Row], from: usize, ceil: f64) -> (Option<usize>, usize, Option<usize>) {
+        let cap = rows[from].cap;
+        let fit = rows[from..].iter().position(|r| r.sent <= cap * 1.05 && r.cap == cap);
+        let over = rows[from..].iter().take_while(|r| r.cap == cap).filter(|r| r.sent > cap * 1.1).count();
+        let up = rows[from..].iter().position(|r| r.sent >= 0.9 * cap.min(ceil));
+        (fit, over, up)
+    }
+    fn util(rows: &[Row], a: usize, b: usize, ceil: f64) -> f64 { rows[a..b].iter().map(|r| r.sent.min(r.cap) / r.cap.min(ceil)).sum::<f64>() / (b - a) as f64 }
+    fn changes(rows: &[Row]) -> usize { rows.iter().filter(|r| r.recreated).count() }
+
+    #[test]
+    fn medida_adaptacao() {
+        let ceil = auto_bitrate(1080, 30) as f64;
+        // A: 20 → 2 Mbps (t=20) → 20 Mbps (t=50)
+        let a = closed_loop(&[(20, 20e6, 0.0), (30, 2e6, 0.0), (60, 20e6, 0.0)], 1080, 30, 20.0);
+        if std::env::var("BRIKS_SERIE").is_ok() { for (i, r) in a.iter().enumerate() { eprintln!("A t={i} cap={:.1} sent={:.2} est={:.2} nivel={} rec={}", r.cap / 1e6, r.sent / 1e6, r.est / 1e6, r.level, r.recreated); } }
+        let (fit, over, _) = react(&a, 20, ceil);
+        let (_, _, up) = react(&a, 50, ceil);
+        eprintln!("A queda 20->2 Mbps: cabe em {fit:?} s, {over} s de estouro; volta a 90% em {up:?} s; utilização no vale {:.0}%, na volta (10 s depois) {:.0}%; recriações do codificador {}",
+            util(&a, 25, 50, ceil) * 100.0, util(&a, 60, 110, ceil) * 100.0, changes(&a));
+        // B: escada 6 → 3 → 1.5 → 0.8 → 3 → 6
+        let b = closed_loop(&[(20, 6e6, 0.0), (20, 3e6, 0.0), (20, 1.5e6, 0.0), (20, 0.8e6, 0.0), (30, 3e6, 0.0), (30, 6e6, 0.0)], 1080, 30, 25.0);
+        eprintln!("B escada: util 3M {:.0}% | 1.5M {:.0}% | 0.8M {:.0}% | sobe 3M {:.0}% | 6M {:.0}% ; recriações {}",
+            util(&b, 30, 40, ceil) * 100.0, util(&b, 50, 60, ceil) * 100.0, util(&b, 70, 80, ceil) * 100.0, util(&b, 100, 110, ceil) * 100.0, util(&b, 130, 140, ceil) * 100.0, changes(&b));
+        let (_, _, up3) = react(&b, 80, ceil);
+        eprintln!("B volta de 0.8 para 3 Mbps: 90% em {up3:?} s; segundos de estouro nas quedas: {}", [20usize, 40, 60].iter().map(|f| react(&b, *f, ceil).1).sum::<usize>());
+        // antes das mudanças: 18 s de estouro nas quedas e 16 s para voltar a 90% (3 Mbps)
+        assert!([20usize, 40, 60].iter().map(|f| react(&b, *f, ceil).1).sum::<usize>() <= 12 && up3.map_or(false, |u| u <= 13), "escada: estouro/volta piores que o medido");
+        // C: Wi-Fi com 3% de perda aleatória em 4 Mbps; e 8%
+        for r in [0.03, 0.08] {
+            let c = closed_loop(&[(60, 4e6, r)], 1080, 30, 30.0);
+            eprintln!("C perda aleatoria {:.0}% em 4 Mbps: util {:.0}% (20-60 s), nível médio {:.2}, recriações {}", r * 100.0, util(&c, 20, 60, ceil) * 100.0, c[20..].iter().map(|r| r.level as f64).sum::<f64>() / 40.0, changes(&c));
+            if r < 0.05 { assert!(util(&c, 20, 60, ceil) > 0.95 && changes(&c) <= 2, "perda aleatória leve: util {:.2}, recriações {}", util(&c, 20, 60, ceil), changes(&c)); }
+        }
+        // D: dips de 5 s a 1 Mbps a cada 25 s numa linha de 6 Mbps (60 s)
+        let d = closed_loop(&[(20, 6e6, 0.0), (5, 1e6, 0.0), (20, 6e6, 0.0), (5, 1e6, 0.0), (20, 6e6, 0.0), (5, 1e6, 0.0), (30, 6e6, 0.0)], 1080, 30, 25.0);
+        if std::env::var("BRIKS_SERIE").is_ok() { for (i, r) in d.iter().enumerate().take(60) { eprintln!("D t={i} cap={:.1} sent={:.2} est={:.2} nivel={} rec={}", r.cap / 1e6, r.sent / 1e6, r.est / 1e6, r.level, r.recreated); } }
+        let (_, _, upd) = react(&d, 25, ceil);
+        eprintln!("D dips de 5 s: util geral {:.0}%, recriações {}, depois do 1o dip 90% em {upd:?} s, estouro total {}s", util(&d, 0, d.len(), ceil) * 100.0, changes(&d), d.iter().filter(|r| r.sent > r.cap * 1.1).count());
+        // E: rede melhorando devagar 1 -> 6 Mbps em 60 s (rampa)
+        let ramp: Vec<(u64, f64, f64)> = (0..60).map(|i| (1u64, 1e6 + 5e6 * i as f64 / 59.0, 0.0)).collect();
+        let e = closed_loop(&ramp, 1080, 30, 25.0);
+        eprintln!("E rampa 1->6 Mbps: util média {:.0}%, último 10 s {:.0}%", util(&e, 0, 60, ceil) * 100.0, util(&e, 50, 60, ceil) * 100.0);
     }
 }
