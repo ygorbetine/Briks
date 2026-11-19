@@ -230,6 +230,8 @@ void share_open_dialog(app_state_t *s) {
     cmd("{\"cmd\":\"share.audio.list\"}");
 }
 
+#define START_TIMEOUT_MS 15000ull   /* "Iniciando…" não fica para sempre: sem o 1º quadro em 15 s a transmissão é parada com um aviso */
+static unsigned long long g_start_t0[2];
 static char g_last_err[320];   /* motivo completo da última parada da transmissão (o chip mostra só um resumo) */
 static void send_start(app_state_t *s, const char *kind, const char *id, const char *label) {
     share_state_t *q = &s->sh;
@@ -242,7 +244,7 @@ static void send_start(app_state_t *s, const char *kind, const char *id, const c
     qual_leave(q, qprev);
     cmd(line);
     copy(q->last_kind, sizeof q->last_kind, kind); copy(q->last_id, sizeof q->last_id, id); copy(q->label, sizeof q->label, label);
-    q->starting = true; q->err[0] = 0;
+    q->starting = true; q->err[0] = 0; g_start_t0[0] = GetTickCount64();
 }
 
 /* 2ª tela simultânea: mesma qualidade escolhida, sem áudio (o áudio da transmissão é o da 1ª tela) */
@@ -256,7 +258,7 @@ static void send_start_second(app_state_t *s, const char *kind, const char *id, 
     qual_leave(q, qprev);
     cmd(line);
     copy(q->second.label, sizeof q->second.label, label); copy(q->second.kind, sizeof q->second.kind, kind); copy(q->second.id, sizeof q->second.id, id);
-    q->second.starting = true; q->err[0] = 0;
+    q->second.starting = true; q->err[0] = 0; g_start_t0[1] = GetTickCount64();
 }
 
 static void start_selected(app_state_t *s) {
@@ -602,6 +604,12 @@ int share_thumb_probe(void) { int c = 0; for (int i = 0; i < BRIKS_MAX_PEERS; i+
 bool overlay_live_wanted(int slot, bool second);   /* overlay_host.c */
 void share_tick(cui_ctx *ui, app_state_t *s) {
     share_state_t *q = &s->sh;
+    if (q->starting || q->second.starting) {   /* captura ou codificador que não entrega nada: desiste com uma mensagem em vez de ficar em "Iniciando…" */
+        const unsigned long long now = GetTickCount64();
+        if (q->starting && now - g_start_t0[0] > START_TIMEOUT_MS) { cmd("{\"cmd\":\"share.stop\"}"); q->starting = false; copy(q->err, sizeof q->err, "A transmissão não começou em 15 segundos (a captura ou o codificador de vídeo não respondeu). Clique em Tentar de novo; se repetir, atualize o driver da placa de vídeo e mande o arquivo rede.log ao suporte."); }
+        if (q->second.starting && now - g_start_t0[1] > START_TIMEOUT_MS) { cmd("{\"cmd\":\"share.stop\",\"slot\":1}"); memset(&q->second, 0, sizeof q->second); copy(q->err, sizeof q->err, "A 2ª tela não começou em 15 segundos. Tente de novo."); }
+        cui_request_wakeup(ui, 1.0f);
+    }
     for (int k = 0; k < 12; k++) {   /* avisos de transmissão guardados de gente que ainda não estava na lista: aplica quando ela aparece (ou descarta após 2 min) */
         pend_share_t *e = &g_pshare[k]; if (!e->used) continue;
         if ((double)GetTickCount64() / 1000.0 - e->at > 120.0) { e->used = false; continue; }

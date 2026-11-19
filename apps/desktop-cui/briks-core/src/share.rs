@@ -538,6 +538,7 @@ pub const KEY_EVERY_S: u32 = 5;
 /// Inicia o emissor numa thread. `ev` recebe eventos JSON ("share.local"...); `preview` = arquivo de quadro compartilhado da prévia.
 pub fn start_sender(gen: u64, idr: Arc<AtomicBool>, net: Arc<Mutex<crate::adapt::NetShared>>, cfg: ShareCfg, out: VideoOut, ev: mpsc::Sender<Value>, preview: Option<PathBuf>, dump: Option<PathBuf>) -> Result<Sender, String> {
     let cap = Capture::start(cfg.kind.clone(), cfg.fps, cfg.height, preview.is_some(), dump.is_some()).map_err(|e| e.to_string())?;
+    crate::netlog::write("transmissao: captura aberta, esperando o primeiro quadro");   // diagnóstico do "Iniciando…" que não termina: este é o 1º passo
     let stop = Arc::new(AtomicBool::new(false));
     idr.store(true, Ordering::Relaxed);
     let (tx, queued) = (out.tx.clone(), out.queued.clone());   // bytes esperando no pacer
@@ -558,6 +559,7 @@ pub fn start_sender(gen: u64, idr: Arc<AtomicBool>, net: Arc<Mutex<crate::adapt:
         let mut dec = ctl.decide(est.est);
         let mut fps = dec.level.fps;
         let _fine = FineTimer::acquire();   // esperas de 1 ms (pacer e este laço) enquanto a transmissão está no ar
+        let mut first_frame_logged = false;
         let mut cad = Cadence::new(Instant::now(), fps);
         cad.repeat = std::env::var("BRIKS_SHARE_NO_REPEAT").is_err();
         cad.follow_source = std::env::var("BRIKS_SHARE_NO_FOLLOW").is_err();
@@ -686,6 +688,7 @@ pub fn start_sender(gen: u64, idr: Arc<AtomicBool>, net: Arc<Mutex<crate::adapt:
                 None if tick == Tick::Repeat => match held.take() { Some(y) => { repeated += 1; (y, true) } None => continue },
                 None => continue,
             };
+            if !first_frame_logged { first_frame_logged = true; crate::netlog::write(&format!("transmissao: primeiro quadro capturado {}x{}", yuv.w, yuv.h)); }
             // troca de aba / repintura: não deixa o preto passageiro chegar ao espectador (segura o último quadro bom). O quadro
             // repetido já passou por aqui quando era novo.
             if !is_repeat && guard.hold(Instant::now(), dark_fraction(&yuv.y)) { held_win += 1; continue; }
@@ -708,6 +711,7 @@ pub fn start_sender(gen: u64, idr: Arc<AtomicBool>, net: Arc<Mutex<crate::adapt:
             if enc.as_ref().map(|e| (e.w, e.h) != (tw, th)).unwrap_or(true) {
                 let bps = if cfg.adaptive { enc_bps(dec.bps) } else if cfg.kbps == 0 { video::auto_bitrate(th, fps) } else { (cfg.kbps * 1000).min(MAX_BPS) };
                 let tc = Instant::now();
+                crate::netlog::write(&format!("transmissao: criando o codificador {tw}x{th} ({})", if sup.software { "software" } else { "hardware" }));
                 let made = H264Enc::new_codec_qp(out_codec, tw, th, fps as f32, bps, !sup.software, qpg.cap);
                 if tc.elapsed() > Duration::from_millis(200) && std::env::var("BRIKS_EST_DEBUG").is_ok() { eprintln!("[lento] criar codificador {tw}x{th}: {} ms", tc.elapsed().as_millis()); }
                 match made {
@@ -723,6 +727,11 @@ pub fn start_sender(gen: u64, idr: Arc<AtomicBool>, net: Arc<Mutex<crate::adapt:
                     }
                     Err(e) => {
                         eprintln!("[encoder] não foi possível criar o codificador {tw}x{th}: {e}");
+                        crate::netlog::write(&format!("transmissao: o codificador ({}) não abriu: {e}", if sup.software { "software" } else { "hardware" }));
+                        if !recreated_for_fault && sup.total_faults == 0 && !sup.software {
+                            // 1ª criação com o de hardware falhando: tenta uma vez o de software antes de desistir
+                            sup.software = true; held = Some(yuv); continue;
+                        }
                         if !recreated_for_fault && sup.total_faults == 0 {
                             // 1ª criação (início da transmissão): sem codificador nenhum não há o que recuperar
                             closed_reason = format!("O codificador de vídeo não abriu: {e}. Clique em Tentar de novo; se repetir, atualize o driver da placa de vídeo."); break;
