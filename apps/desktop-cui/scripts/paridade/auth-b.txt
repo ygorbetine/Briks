@@ -1,4 +1,5 @@
-# Auth: criar conta com e-mail
+# Auth: criar conta com e-mail (aberto por BRIKS_DEV_ACCT=signup; a tela inicial so mostra Google/Discord): digitar o nome muda o formulario
 snap b0
-mtap 708 659
+mtap 648 361
+type Ana
 snap b1

@@ -1,6 +1,7 @@
-# Auth: entrar com e-mail -> esqueci minha senha (demo login)
+# Auth: formulario de e-mail (aberto por BRIKS_DEV_ACCT=login: desde a 1.5.17 a tela inicial so mostra Google/Discord e o e-mail fica escondido) -> digitar -> esqueci minha senha
 snap a0
-mtap 570 659
+mtap 648 426
+type voce@exemplo.com
 snap a1
 mtap 648 578
 snap a2

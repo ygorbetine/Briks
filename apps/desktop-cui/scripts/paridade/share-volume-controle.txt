@@ -8,11 +8,11 @@ wheel 1
 waitms 300
 expect share_vol_0 105
 expect share_zoom 100
-snap s1
+shot s1
 mclick 937 681
 waitms 300
 expect share_vol_0 0
-snap s2
+shot s2
 mclick 937 681
 waitms 300
 expect share_vol_0 105
