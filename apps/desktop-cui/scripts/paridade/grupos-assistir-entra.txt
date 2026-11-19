@@ -1,0 +1,12 @@
+# GRP-17: "Assistir" na lista de membros sem estar na sala: entra na sala do canal e abre a transmissao da pessoa (BRIKS_DEMO_WATCH = sem core)
+waitms 600
+expect grp_call_mode -1
+expect share_remote_on 0
+shot wa0
+tap 405 656
+waitms 900
+expect grp_call_mode 11
+expect watch_pend 0
+expect share_remote_on 1
+expect share_sfocus 0
+shot wa1

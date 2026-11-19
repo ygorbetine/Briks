@@ -247,7 +247,8 @@ void share_open_dialog(app_state_t *s) {
     cmd("{\"cmd\":\"share.audio.list\"}");
 }
 
-#define START_TIMEOUT_MS 15000ull   /* "Iniciando…" não fica para sempre: sem o 1º quadro em 15 s a transmissão é parada com um aviso */
+static unsigned long long start_timeout_ms(void) { static unsigned long long v; if (!v) { const char *e = getenv("BRIKS_START_TIMEOUT_MS"); v = e && atoi(e) > 0 ? (unsigned long long)atoi(e) : 15000ull; } return v; }   /* roteiro: BRIKS_START_TIMEOUT_MS encurta o prazo */
+#define START_TIMEOUT_MS start_timeout_ms()   /* "Iniciando…" não fica para sempre: sem o 1º quadro em 15 s a transmissão é parada com um aviso */
 static unsigned long long g_start_t0[2];
 static char g_last_err[320];   /* motivo completo da última parada da transmissão (o chip mostra só um resumo) */
 static void send_start(app_state_t *s, const char *kind, const char *id, const char *label) {
@@ -627,8 +628,40 @@ bool share_thumb_cells(int slot, const unsigned char **cells, int *cw, int *ch) 
 int share_thumb_probe(void) { int c = 0; for (int i = 0; i < BRIKS_MAX_PEERS; i++) if (g_thumb[i].tex) c++; return c; }
 
 bool overlay_live_wanted(int slot, bool second);   /* overlay_host.c */
+/* "Assistir" na lista de membros do grupo: entra na sala do canal (se ainda não estou nela) e abre a transmissão dessa pessoa assim que ela
+ * aparece na sala. Vale nos dois modos (Servidor e Direto): só usa rtc_join_room. Desiste em 45 s (a pessoa parou ou não chegou). */
+static struct { char name[48], room[96]; unsigned long long t0; bool on; } g_wpend;
+
+static bool watch_try(app_state_t *s) {
+    if (!s->in_room || strcmp(s->room_name, g_wpend.room)) return false;
+    for (int i = 0; i < BRIKS_MAX_PEERS; i++)
+        if (s->rtc_peers[i].id[0] && !strcmp(s->rtc_peers[i].name, g_wpend.name) && (s->sh.remote[i].on || s->sh.remote2[i].on)) {
+            s->screen = SCREEN_CALL; s->call_mode = 1; s->call_view = 0; share_focus_peer(i); g_wpend.on = false; return true;
+        }
+    return false;
+}
+
+void share_watch_member(app_state_t *s, const char *room, const char *name) {
+    memset(&g_wpend, 0, sizeof g_wpend);
+    copy(g_wpend.name, sizeof g_wpend.name, name); copy(g_wpend.room, sizeof g_wpend.room, room);
+    g_wpend.t0 = GetTickCount64(); g_wpend.on = true;
+    s->screen = SCREEN_CALL; s->call_mode = 1; s->call_view = 0;   /* já mostra a chamada; a transmissão abre quando a pessoa chegar */
+    if (s->in_room && strcmp(s->room_name, room)) { rtc_leave_room(s); s->rtc_session_sent = s->rtc_session_ready; }   /* estava em outra sala: sai dela */
+    if (getenv("BRIKS_DEMO_WATCH")) {   /* roteiro: sem core nem rede; "entra" na sala e a pessoa chega transmitindo (mesmo caminho dos eventos reais) */
+        if (!s->in_room) { copy(s->room_name, sizeof s->room_name, room); s->in_room = true; }
+        if (!s->rtc_peers[0].id[0]) {
+            copy(s->rtc_peers[0].id, sizeof s->rtc_peers[0].id, "demo-0"); copy(s->rtc_peers[0].name, sizeof s->rtc_peers[0].name, name); copy(s->rtc_peers[0].state, sizeof s->rtc_peers[0].state, "autenticado");
+            jval *jj = json_parse("{\"ev\":\"share.remote\",\"peer_id\":\"demo-0\",\"state\":\"on\",\"w\":1280,\"h\":720,\"fps\":30,\"kbps\":4000,\"label\":\"Tela 1\"}");
+            if (jj) { share_handle_event(s, jj, "share.remote"); json_free(jj); }
+        }
+    } else if (!s->in_room) rtc_join_room(s, room);
+    watch_try(s);
+}
+
 void share_tick(cui_ctx *ui, app_state_t *s) {
     share_state_t *q = &s->sh;
+    { static int once; if (!once && getenv("BRIKS_DEV_STARTING")) { once = 1; q->starting = true; g_start_t0[0] = GetTickCount64(); } }   /* roteiro: "Iniciando…" sem captura, para provar o prazo */
+    if (g_wpend.on) { if (GetTickCount64() - g_wpend.t0 > 45000ull || watch_try(s)) g_wpend.on = false; else cui_request_wakeup(ui, 0.5f); }
     if (q->starting || q->second.starting) {   /* captura ou codificador que não entrega nada: desiste com uma mensagem em vez de ficar em "Iniciando…" */
         const unsigned long long now = GetTickCount64();
         if (q->starting && now - g_start_t0[0] > START_TIMEOUT_MS) { cmd("{\"cmd\":\"share.stop\"}"); q->starting = false; copy(q->err, sizeof q->err, "A transmissão não começou em 15 segundos (a captura ou o codificador de vídeo não respondeu). Clique em Tentar de novo; se repetir, atualize o driver da placa de vídeo e mande o arquivo rede.log ao suporte."); }
@@ -1513,6 +1546,10 @@ int share_probe(const char *n, const app_state_t *s) {
     if (!strcmp(n, "share_cx")) return (int)g_zoom[0].cx;   /* ponto da imagem no meio da moldura: muda ao arrastar */
     if (!strcmp(n, "share_cy")) return (int)g_zoom[0].cy;
     if (!strcmp(n, "share_mode")) return s->call_mode;
+    if (!strcmp(n, "share_starting")) return s->sh.starting;
+    if (!strcmp(n, "share_err")) return s->sh.err[0] != 0;
+    if (!strcmp(n, "share_sfocus")) return g_sfocus;   /* transmissão em destaque no Foco (-1 = a primeira) */
+    if (!strcmp(n, "watch_pend")) return g_wpend.on;   /* "Assistir" da lista de membros esperando a pessoa chegar */
     if (!strcmp(n, "share_tiles")) return g_tiles;
     if (!strcmp(n, "prev_note_off")) return g_prev_note_off;   /* aviso "Prévia com qualidade reduzida" dispensado */
     if (!strcmp(n, "thumbs")) return share_thumb_probe();   /* avatares com thumb desfocada */
