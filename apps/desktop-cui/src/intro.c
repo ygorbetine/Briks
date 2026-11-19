@@ -193,6 +193,7 @@ static bool begin(bool enabled, bool start_min) {
     g_t0 = qpc(); g_state = 1; return true;
 }
 
+#define INTRO_OPACITY 0.8f   /* opacidade máxima da abertura (fundo e vídeo): o app aparece de leve por baixo */
 typedef struct { cui_texture tex; int w, h; float a; } paint_t;
 static void paint(cui_ctx *ui, cui_rect r, void *u) {
     const paint_t *p = (const paint_t *)u;
@@ -218,7 +219,7 @@ void intro_draw(cui_ctx *ui, bool enabled, bool start_minimized) {
     }
     float a = 1.0f;
     if (g_force_ms < 0) { int64_t left = g_total_ms + 150 - t; if (left < 350) a = left <= 0 ? 0.0f : (float)left / 350.0f; if (t < 120) a = (float)t / 120.0f; }
-    paint_t pt = { g_tex, g_w, g_h, a };
+    paint_t pt = { g_tex, g_w, g_h, a * INTRO_OPACITY };
     cui_canvas_result cr = cui_canvas(ui, "intro-canvas", CUI_FILL, CUI_FILL, paint, &pt, sizeof pt);
     if (g_force_ms < 0 && cr.clicked) finish(ui);
 }

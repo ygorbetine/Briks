@@ -9,6 +9,7 @@ void app_begin(app_state_t *s, op_t op, const char *m, const char *p, const char
 #include "../src/sysint.h"
 sys_cfg_t g_sys = { .mic_on = true };   /* winstate.c: estado lembrado do microfone */
 void rtc_join_room(app_state_t *s, const char *r) { (void)s; (void)r; }
+void share_watch_member(app_state_t *s, const char *room, const char *name) { (void)s; (void)room; (void)name; }   /* ui_share.c: Assistir na lista de membros */
 int notify_unread_for(const char *chan) { (void)chan; return 0; }
 void ginvite_expect(const char *u, const char *g) { (void)u; (void)g; }   /* ginvite.c: convite pela DM (o teste de grupos não envia DM) */
 void ginvite_signed(app_state_t *s, const char *gid, const char *n, const char *c) { (void)s; (void)gid; (void)n; (void)c; }
