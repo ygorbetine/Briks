@@ -157,6 +157,8 @@ static void frame(cui_ctx *ui) {
             media_frame(ui);             /* 1.4.3: player inline para se a prévia saiu da tela */
             idle_banner(ui, &state);     /* CHM-16: aviso de inatividade na chamada */
             dmcall_overlay(ui, &state);  /* faixa "Chamando…" da chamada individual */
+            friends_notify_tick(&state); /* detecta amigo que ficou online / entrou na chamada, em qualquer tela */
+            friends_toast(ui, &state);   /* cartão "ficou online" (estilo Steam), em qualquer tela */
             update_banner(ui, &state);   /* dentro da pilha: sobrepõe a tela sem ocupar espaço do layout */
             if (getenv("BRIKS_SCRIPT")) script_overlay(ui);
         }

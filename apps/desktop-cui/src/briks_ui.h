@@ -266,7 +266,9 @@ void groups_collapse_set(const char *gid, bool on);   /* 1.4.1: grupo recolhido 
 void groups_header(cui_ctx *ui, app_state_t *s);
 void groups_dialogs(cui_ctx *ui, app_state_t *s);
 void groups_create_json(const app_state_t *s, char *out, size_t cap);
-void groups_overlay(cui_ctx *ui, app_state_t *s);                              /* menu de contexto do grupo (camada de cima, junto do menu da mensagem) */
+void groups_overlay(cui_ctx *ui, app_state_t *s);                              /* menu de contexto do grupo (camada de cima, junto do menu da mensagem) */
+void friends_toast_demo(app_state_t *s);                                          /* teste: mostra o cartão do amigo 0 */
+void friends_toast(cui_ctx *ui, app_state_t *s);                                   /* cartão "ficou online" no estilo Steam (canto inferior direito) */
 void friends_overlay(cui_ctx *ui, app_state_t *s);                                 /* menu de contexto (botão direito) do amigo, camada de cima */
 void friends_row_menu(cui_ctx *ui, app_state_t *s, int i, cui_rect r);            /* botão direito na linha do amigo */
 void friends_code_card(cui_ctx *ui, app_state_t *s);   /* cartão "Por código" (gerar/copiar/aceitar), usado no diálogo e no hub */
@@ -573,6 +575,17 @@ static inline cui_texture person_photo(const app_state_t *s, const char *id, con
 }
 /* ÚNICO ponto que desenha o avatar de uma pessoa: foto (textura em cache, recorte circular do cui) ou, sem foto, as iniciais. Todas as telas passam por aqui. */
 static inline void briks_avatar(cui_ctx *ui, const char *name, float size, cui_texture photo) { cui_avatar_ex(ui, name, &(cui_avatar_opts){ .size = size, .image = photo }); }
+/* avatar com a bolinha verde de "online" no canto inferior direito (Briks aberto): amigos e o próprio perfil. Sem online, é só o avatar. */
+static inline void briks_avatar_online(cui_ctx *ui, const char *name, float size, cui_texture photo, bool online) {
+    if (!online) { briks_avatar(ui, name, size, photo); return; }
+    const float d = size < 30.0f ? 10.0f : size < 60.0f ? 12.0f : 16.0f;
+    cui_box(ui, .dir = CUI_STACK, .width = CUI_PX(size), .height = CUI_PX(size)) {
+        briks_avatar(ui, name, size, photo);
+        cui_box(ui, .width = CUI_FILL, .height = CUI_FILL, .align = CUI_ALIGN_END, .justify = CUI_JUSTIFY_END) {
+            cui_box(ui, .width = CUI_PX(d), .height = CUI_PX(d), .radius = d * 0.5f, .bg = B_ONLINE, .border = 2, .border_color = CUI_RGB(0x17101f)) {}
+        }
+    }
+}
 /* accountx.c: data de nascimento do cadastro e dica de login por @nick */
 bool birth_parse(const char *t, int *d, int *m, int *y);
 int birth_check(const char *txt, int ty, int tm, int td, char *err, size_t cap);   /* 0 = maior de 18; 1 formato, 2 futuro, 3 menor */

@@ -100,6 +100,7 @@ bool dmcall_event(app_state_t *s, const char *ev, const jval *j) {
         return true;
     }
     if (!strcmp(ev, "dmcall.script")) { dmcall_start(s, 0); return true; }
+    if (!strcmp(ev, "friendtoast.script")) { friends_toast_demo(s); return true; }
     if (strcmp(ev, "dm.signal") && strcmp(ev, "dm.signal.gone")) return false;
     const char *fp = json_str(j, "fp", ""), *kind = json_str(j, "kind", ""); const jval *d = json_get(j, "data");
     const bool gone = !strcmp(ev, "dm.signal.gone");

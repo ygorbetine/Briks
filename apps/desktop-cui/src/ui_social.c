@@ -209,14 +209,14 @@ static void bubbles_draw(cui_ctx *ui) {
 }
 
 static cui_rect g_last_row;   /* retângulo (quadro anterior) da última linha desenhada por person_row_ex: o menu de contexto do grupo usa */
-static int g_row_unread, g_row_pending, g_row_invites;   /* definidos por quem chama antes de person_row_ex (não lidas e mensagens à espera do amigo); zerados aqui */
+static int g_row_unread, g_row_pending, g_row_invites; static bool g_row_online;   /* definidos por quem chama antes de person_row_ex (não lidas e mensagens à espera do amigo); zerados aqui */
 static bool person_row_ex(cui_ctx *ui, const person_t *f, bool active, cui_texture img) {
-    const int unread = g_row_unread, pending = g_row_pending, invites = g_row_invites; g_row_unread = g_row_pending = g_row_invites = 0;
+    const int unread = g_row_unread, pending = g_row_pending, invites = g_row_invites; g_row_unread = g_row_pending = g_row_invites = 0; const bool row_online = g_row_online; g_row_online = false;
     cui_push_id(ui, f->name);
     if (active && f->status[0]) cui_gap(ui, 52);   /* reserva o lugar do balão de status: ele não cobre o título nem outros itens */
     cui_box(ui, .id = "b", .dir = CUI_ROW, .width = CUI_FILL, .pad_x = 8, .pad_y = 6, .gap = 10, .radius = 12,
             .bg = active ? B_A(B_C1, 0x38) : CUI_RGBA(0x00000000), .align = CUI_ALIGN_CENTER) {
-        cui_box(ui, .id = "av") { briks_avatar(ui, f->name, 32, img); }
+        cui_box(ui, .id = "av") { briks_avatar_online(ui, f->name, 32, img, row_online); }
         const char *line = f->presence;   /* a linha sob o nome é só o rich presence; o status vai no balão */
         if (line[0]) {   /* rich presence: linha pequena sob o nome */
             cui_column(ui, .gap = 0, .width = CUI_FILL) {
@@ -330,6 +330,7 @@ static void navigation(cui_ctx *ui, app_state_t *s) {
             for (int i = 0; i < s->friend_count; i++) {
                 cui_push_id_int(ui, i);
                 { char dc[160]; chat_dm_channel(s, s->friends[i].id, dc, sizeof dc); g_row_unread = s->active_friend == i ? 0 : notify_unread_for(dc); g_row_pending = s->friends[i].fp[0] ? chat_pending_for_fp(s->friends[i].fp) : 0; g_row_invites = ginvite_pending_from(s->friends[i].id); }
+                g_row_online = friends_online(s, &s->friends[i]);
                 if (person_row_ex(ui, &s->friends[i], s->active_friend == i, friend_photo(s->friends[i].id))) app_open_friend(s, i);
                 { cui_push_id(ui, s->friends[i].name); const cui_rect rr = cui_get_rect(ui, cui_make_id(ui, "b")); cui_pop_id(ui); friends_row_menu(ui, s, i, rr); }   /* botão direito no nome: menu de contexto */
                 cui_pop_id(ui);
@@ -341,7 +342,7 @@ static void navigation(cui_ctx *ui, app_state_t *s) {
             const bool f_compact = g_panel_w < 220.0f;   /* painel estreito: sai o texto (nome/status), ficam a foto e os três ícones, sem nada cortado */
             cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .pad = 8, .pad_right = 8, .gap = g_panel_w < 300.0f ? 4 : 8, .radius = 18, .bg = B_GLASS_CARD, .clip = true,
                     .border = 1, .border_color = B_GLASS_BORDER, .align = CUI_ALIGN_CENTER) {
-                cui_box(ui, .id = "avatar") { briks_avatar(ui, s->user_name, 32, s->user_photo); }
+                cui_box(ui, .id = "avatar") { briks_avatar_online(ui, s->user_name, 32, s->user_photo, true); }
                 if (briks_clicked_r(ui, "avatar", 16.0f)) { s->profile_open = true; s->profile_tab = 0; }
                 bubble_note(cui_get_rect(ui, cui_make_id(ui, "avatar")), s->user_status);
                 if (f_compact) cui_box(ui, .width = CUI_FILL) {}
@@ -647,7 +648,7 @@ static void profile_dialog(cui_ctx *ui, app_state_t *s) {
             /* lateral: foto + nome + @nick, seções e o botão discreto de desconectar no rodapé */
             cui_box(ui, .width = CUI_PX(236), .height = CUI_FILL, .pad = 12, .gap = 4, .radius = 18, .bg = B_GLASS_CARD, .border = 1, .border_color = B_GLASS_BORDER) {
                 cui_row(ui, .gap = 12, .width = CUI_FILL, .align = CUI_ALIGN_CENTER, .pad_bottom = 10) {
-                    briks_avatar(ui, s->user_name, 56, s->user_photo);
+                    briks_avatar_online(ui, s->user_name, 56, s->user_photo, true);
                     cui_column(ui, .gap = 1, .width = CUI_FILL) {
                         cui_text(ui, s->user_name, .font = CUI_FONT_DISPLAY, .size = 16, .nowrap = true);
                         char nick[100]; nick_text(s, nick, sizeof nick);
@@ -668,7 +669,7 @@ static void profile_dialog(cui_ctx *ui, app_state_t *s) {
                     if (s->acct_user_id[0]) { ui_account_editor(ui, s); break; }   /* conta online: foto, nome e @nick vêm do servidor */
                     PCARD(ui, "PERFIL") {
                         cui_row(ui, .gap = 18, .width = CUI_FILL, .align = CUI_ALIGN_CENTER) {
-                            briks_avatar(ui, s->user_name, 96, s->user_photo);
+                            briks_avatar_online(ui, s->user_name, 96, s->user_photo, true);
                             cui_column(ui, .gap = 8, .width = CUI_FILL) {
                                 cui_text(ui, "Nome exibido", .size = 12, .color = B_MUTED);
                                 cui_input(ui, "pf-name", name_draft, sizeof name_draft, .placeholder = "Seu nome");

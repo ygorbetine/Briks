@@ -349,7 +349,7 @@ bool rtc_handle_event(app_state_t *s, const char *line) {
         changed = false;
     } else if (!strcmp(ev, "dm.wake")) {   /* um amigo quer falar comigo e eu não estou em sala com ele: abre a minha ponta do canal direto */
         chat_dm_wake(s, json_str(j, "fp", "")); changed = false;
-    } else if (!strncmp(ev, "dm.signal", 9) || !strcmp(ev, "dmcall.script")) {   /* sinal assinado da caixa de chegada: chamada individual / convite de grupo */
+    } else if (!strncmp(ev, "dm.signal", 9) || !strcmp(ev, "dmcall.script") || !strcmp(ev, "friendtoast.script")) {   /* sinal assinado da caixa de chegada: chamada individual / convite de grupo */
         changed = dmcall_event(s, ev, j);
     } else if (!strcmp(ev, "dm.state")) {
         changed = false;

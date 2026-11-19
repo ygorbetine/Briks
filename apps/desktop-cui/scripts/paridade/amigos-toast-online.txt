@@ -1,0 +1,6 @@
+# Cartao 'ficou online' no estilo Steam e bolinha verde nos avatares
+waitms 800
+shot t0
+friend-toast
+waitms 700
+shot t1

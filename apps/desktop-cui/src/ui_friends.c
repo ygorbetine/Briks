@@ -145,6 +145,33 @@ bool friends_online(const app_state_t *s, const person_t *p) {
 
 /* ---- avisos de amigo (FriendNotifyPanel): quem ficou online ou entrou na chamada; a faixa aparece no topo da tela e some sozinha ---- */
 static char fn_text[100]; static ULONGLONG fn_until;
+/* aviso no estilo Steam: cartão no canto de baixo à direita, com o avatar (bolinha verde), o nome e o que aconteceu; entra deslizando, some sozinho em 6 s; clicar abre a conversa */
+static char ft_id[48], ft_name[96], ft_what[64]; static ULONGLONG ft_t0; static bool ft_call;
+#define FT_MS 6000
+static void toast_show(const person_t *p, const char *what, bool in_call) {
+    snprintf(ft_id, sizeof ft_id, "%s", p->id); snprintf(ft_name, sizeof ft_name, "%s", p->name); snprintf(ft_what, sizeof ft_what, "%s", what); ft_call = in_call; ft_t0 = GetTickCount64();
+}
+void friends_toast(cui_ctx *ui, app_state_t *s) {
+    if (!ft_t0 || s->screen == SCREEN_AUTH) return;
+    const ULONGLONG now = GetTickCount64(), age = now - ft_t0;
+    if (age > FT_MS) { ft_t0 = 0; return; }
+    int fi = -1; for (int k = 0; k < s->friend_count; k++) if (!strcmp(s->friends[k].id, ft_id)) { fi = k; break; }
+    const float in = age < 260 ? (float)age / 260.0f : 1.0f, out = age > FT_MS - 400 ? (float)(FT_MS - age) / 400.0f : 1.0f;
+    const float e = 1.0f - (1.0f - in) * (1.0f - in), slide = (1.0f - e) * 36.0f;
+    cui_box(ui, .width = CUI_FILL, .height = CUI_FILL, .align = CUI_ALIGN_END, .justify = CUI_JUSTIFY_END, .pad_right = 18 - slide, .pad_bottom = 96) {
+        cui_box(ui, .id = "ftoast", .dir = CUI_ROW, .width = CUI_PX(300), .pad_x = 14, .pad_y = 12, .gap = 12, .radius = 16, .bg = B_GLASS_POPUP, .border = 1,
+                .border_color = B_A(B_ONLINE, 0x66), .elevation = CUI_ELEVATION_FLOATING, .align = CUI_ALIGN_CENTER, .opacity = in < out ? in : out) {
+            briks_avatar_online(ui, ft_name, 40, friend_photo(ft_id), true);
+            cui_column(ui, .gap = 2, .width = CUI_FILL) {
+                cui_text(ui, ft_name, .font = CUI_FONT_MEDIUM, .size = 14, .nowrap = true);
+                cui_text(ui, ft_what, .size = 12.5f, .color = ft_call ? B_C3 : B_ONLINE, .nowrap = true);
+            }
+        }
+    }
+    if (briks_clicked_r(ui, "ftoast", 16.0f)) { ft_t0 = 0; if (fi >= 0) { if (s->screen != SCREEN_SOCIAL) s->screen = SCREEN_SOCIAL; app_open_friend(s, fi); } }
+    cui_request_wakeup(ui, 0.03f);
+}
+void friends_toast_demo(app_state_t *s) { if (s->friend_count > 0) toast_show(&s->friends[0], "Ficou online", false); }
 void friends_notify_tick(app_state_t *s) {
     static char prev_id[MAX_FRIENDS][48]; static bool prev_on[MAX_FRIENDS], prev_call[MAX_FRIENDS]; static int prev_n = -1;
     if (!s->acct_user_id[0]) { prev_n = -1; return; }
@@ -160,8 +187,8 @@ void friends_notify_tick(app_state_t *s) {
         if (prev_n < 0 || s->notify_off || friends_bell_off(s, s->friends[i].id)) continue;   /* AMI-15: sino desligado = sem aviso */
         int k = -1; for (int q = 0; q < prev_n; q++) if (!strcmp(prev_id[q], s->friends[i].id)) k = q;
         if (k < 0) continue;
-        if (ncall[i] && !prev_call[k]) { snprintf(fn_text, sizeof fn_text, "%s entrou na sua chamada", s->friends[i].name); fn_until = now + 7000; cui_request_redraw(cui_app_ui(s->app)); notify_friend(s, fn_text, true); }
-        else if (nid[i] && !prev_on[k]) { snprintf(fn_text, sizeof fn_text, "%s ficou online", s->friends[i].name); fn_until = now + 7000; cui_request_redraw(cui_app_ui(s->app)); notify_friend(s, fn_text, false); }
+        if (ncall[i] && !prev_call[k]) { char t[140]; snprintf(t, sizeof t, "%s entrou na sua chamada", s->friends[i].name); toast_show(&s->friends[i], "Entrou na sua chamada", true); cui_request_redraw(cui_app_ui(s->app)); notify_friend(s, t, true); }
+        else if (nid[i] && !prev_on[k]) { char t[140]; snprintf(t, sizeof t, "%s ficou online", s->friends[i].name); toast_show(&s->friends[i], "Ficou online", false); cui_request_redraw(cui_app_ui(s->app)); notify_friend(s, t, false); }
     }
     for (int i = 0; i < n; i++) { snprintf(prev_id[i], sizeof prev_id[i], "%s", s->friends[i].id); prev_on[i] = nid[i]; prev_call[i] = ncall[i]; }
     prev_n = n;
@@ -195,11 +222,10 @@ static bool row_tiny(void) { return g_panel_w < 240.0f; }
 #define ROW_BEGIN(ui, p) \
     cui_box((ui), .id = "fr", .dir = CUI_ROW, .width = CUI_FILL, .pad_x = row_narrow() ? 8 : 12, .pad_y = row_narrow() ? 6 : 8, .gap = row_narrow() ? 8 : 12, .radius = 14, .bg = B_GLASS_CARD, .border = 1, .border_color = B_GLASS_BORDER_SOFT, .align = CUI_ALIGN_CENTER)
 static void row_ident(cui_ctx *ui, const person_t *p, const char *sub_override, bool online) {
-    briks_avatar(ui, p->name, row_narrow() ? 32 : 36, friend_photo(p->id));
+    briks_avatar_online(ui, p->name, row_narrow() ? 32 : 36, friend_photo(p->id), online);   /* bolinha verde no avatar: online agora */
     cui_column(ui, .gap = 1, .width = CUI_FILL) {
         cui_row(ui, .gap = 6, .align = CUI_ALIGN_CENTER) {
             cui_text(ui, p->name, .nowrap = true);
-            if (online) cui_box(ui, .width = CUI_PX(8), .height = CUI_PX(8), .radius = 4, .bg = B_ONLINE);   /* ponto verde: online agora */
         }
         char sub[130] = "";
         if (sub_override) snprintf(sub, sizeof sub, "%s", sub_override);
@@ -587,7 +613,6 @@ void friends_hub(cui_ctx *ui, app_state_t *s) {
 }
 
 void friends_dialogs(cui_ctx *ui, app_state_t *s) {
-    friends_notify_tick(s);
     cui_dialog(ui, "Desconectar P2P", &s->dmdisc_open) {
         cui_textf(ui, "Fechar o chat privado com %s?", s->dmdisc_name);
         cui_text(ui, "A amizade e a chamada continuam. A conversa reconecta sozinha quando um de vocês escrever.", .size = 12.5f, .color = B_MUTED);
