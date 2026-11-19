@@ -31,7 +31,7 @@ typedef struct {
     int mic, out;                 /* índices nas listas de dispositivos (0 = padrão do sistema) */
     char mic_name[64], out_name[64], cam_name[96];   /* cam_name vazio = câmera padrão */
     float in_vol, out_vol;        /* 0..100 */
-    int noise_off;                /* 0 filtro leve de ruído ligado (Padrão), 1 desligado */
+    int noise_off;                /* supressão de ruído: 0 filtro leve (Padrão), 1 desligada, 2 Alta qualidade (RNNoise). Valores antigos 0/1 seguem valendo */
     bool gate_on; float gate_db;  /* porta de ruído, -70..-20 dB */
     bool echo, excl_audio;
     int idle_min;                 /* CHM-35: minutos sem falar até sair da chamada (0 = nunca); padrão 60 */
@@ -180,7 +180,7 @@ static void soon(cui_ctx *ui, const char *what) {   /* o que ainda não tem efei
 }
 void settings_keys(const char **mute, const char **deafen, const char **stream, const char **ptt, bool *ptt_on, float *delay) { *mute = g_set.key_mute; *deafen = g_set.key_deafen; *stream = g_set.key_stream; *ptt = g_set.key_ptt; *ptt_on = g_set.ptt_on; *delay = g_set.ptt_delay; }
 void settings_audio_ex(char *mic, size_t mic_cap, char *out, size_t out_cap, int *noise_off) {
-    snprintf(mic, mic_cap, "%s", g_set.mic ? g_set.mic_name : ""); snprintf(out, out_cap, "%s", g_set.out ? g_set.out_name : ""); *noise_off = g_set.noise_off != 0;
+    snprintf(mic, mic_cap, "%s", g_set.mic ? g_set.mic_name : ""); snprintf(out, out_cap, "%s", g_set.out ? g_set.out_name : ""); *noise_off = g_set.noise_off == 1 ? 1 : g_set.noise_off == 2 ? 2 : 0;
 }
 void settings_overlay(bool *on, float *opacity, int *flags, int *corner) {
     *on = g_set.ov_on; *opacity = g_set.ov_opacity; *corner = g_set.ov_corner < 0 || g_set.ov_corner > 3 ? 0 : g_set.ov_corner;
@@ -531,10 +531,12 @@ void settings_dialog(cui_ctx *ui, app_state_t *s) {
                         sub(ui, "O volume vale na hora, para tudo que você ouve na sala.");
                     }
                     SCARD(ui, "PROCESSAMENTO") {
-                        static const char *NZ[] = { "Padrão", "Desligada" };
+                        static const char *NZ[] = { "Padrão", "Alta qualidade (RNNoise)", "Desligada" };   /* na tela: 0 Padrão, 1 RNNoise, 2 Desligada; salvo: 0, 2, 1 */
+                        int nz = g_set.noise_off == 2 ? 1 : g_set.noise_off == 1 ? 2 : 0;
                         cui_text(ui, "Supressão de ruído", .size = 12, .color = B_MUTED);
-                        seg(ui, "cfg-nz", NZ, 2, &g_set.noise_off);
-                        sub(ui, g_set.noise_off ? "Sem filtro algum: a voz sai como o microfone captou." : "Filtro leve no seu computador: corta ronco grave e abaixa chiado constante (ventilador). Não é a redução por rede neural (RNNoise), que chega depois.");
+                        seg(ui, "cfg-nz", NZ, 3, &nz);
+                        g_set.noise_off = nz == 1 ? 2 : nz == 2 ? 1 : 0;
+                        sub(ui, g_set.noise_off == 2 ? "Rede neural (RNNoise) no seu computador: tira ventilador, teclado e ruído de fundo mantendo a voz. Usa um pouco mais de processador." : g_set.noise_off == 1 ? "Sem filtro algum: a voz sai como o microfone captou." : "Filtro leve: corta ronco grave e abaixa chiado constante (ventilador).");
                         sw(ui, "Porta de ruído", "Silencia o microfone abaixo do limite (teclado, ventilador).", &g_set.gate_on);
                         if (g_set.gate_on) { cui_textf(ui, "Limite: %d dB", (int)g_set.gate_db); cui_slider(ui, "##cfg-gate", &g_set.gate_db, -70, -20); }
                         sub(ui, "A porta de ruído e a supressão valem na hora.");

@@ -92,6 +92,7 @@ pub struct Audio {
     /// Supressão de ruído: 0 = Padrão (filtro leve), 1 = desligada
     noise: AtomicU8,
     nf: Mutex<NoiseFilter>,
+    rnn: Mutex<Rnn>,
     /// Cancelamento de eco: liga/desliga, filtro e fila da referência (o que a saída tocou; a captura consome)
     echo: AtomicBool,
     aec: Mutex<crate::aec::Aec>,
@@ -120,6 +121,7 @@ pub fn process_input(x: &[f32], gain: f32, gate_db: Option<f32>) -> Vec<f32> {
 
 /// Ajustes de áudio vindos das Configurações > Voz.
 #[derive(Debug, Clone, PartialEq)]
+/// `noise`: 0 = Padrão (filtro leve), 1 = desligada, 2 = Alta qualidade (RNNoise).
 pub struct AudioCfg { pub in_gain: f32, pub out_gain: f32, pub gate_db: Option<f32>, pub noise: u8, pub mic: String, pub out: String, pub echo: bool }
 impl Default for AudioCfg { fn default() -> Self { AudioCfg { in_gain: 1.0, out_gain: 1.0, gate_db: None, noise: 0, mic: String::new(), out: String::new(), echo: true } } }
 
@@ -137,6 +139,30 @@ impl NoiseFilter {
         self.floor = if self.floor == 0.0 || r < self.floor { r } else { (self.floor * 1.00005f32.powf(ms)).min(r) };
         let target = if r < self.floor * 2.0 { 0.25 } else { 1.0 };
         for v in x.iter_mut() { self.gain += (target - self.gain) * 0.004; *v *= self.gain; }
+    }
+}
+
+/// Supressão de ruído "Alta qualidade": RNNoise (rede neural da Xiph, via crate `nnnoiseless`, BSD-3). Trabalha em blocos de 480 amostras
+/// (10 ms a 48 kHz, mono) com o estado mantido entre chamadas; entrada de qualquer tamanho. O atraso fixo é de até 1 bloco (10 ms): as
+/// amostras que não completam um bloco esperam o próximo. O primeiro bloco de saída é aquecimento da rede e sai em silêncio.
+pub struct Rnn { st: Box<nnnoiseless::DenoiseState<'static>>, pend: Vec<f32>, first: bool }
+impl Rnn {
+    pub const BLOCK: usize = nnnoiseless::FRAME_SIZE;
+    pub fn new() -> Self { Rnn { st: nnnoiseless::DenoiseState::new(), pend: Vec::with_capacity(Self::BLOCK * 4), first: true } }
+    /// Consome `x` (f32 em -1..1) e devolve o que ficou pronto (múltiplo de 480 amostras; pode ser vazio).
+    pub fn process(&mut self, x: &[f32]) -> Vec<f32> {
+        self.pend.extend_from_slice(x);
+        let n = self.pend.len() / Self::BLOCK * Self::BLOCK;
+        let mut out = Vec::with_capacity(n);
+        let (mut i, mut o) = ([0.0f32; Self::BLOCK], [0.0f32; Self::BLOCK]);
+        for b in self.pend[..n].chunks_exact(Self::BLOCK) {
+            for (d, s) in i.iter_mut().zip(b) { *d = s.clamp(-1.0, 1.0) * 32768.0; }
+            self.st.process_frame(&mut o, &i);
+            if self.first { self.first = false; out.extend(std::iter::repeat(0.0).take(Self::BLOCK)); }
+            else { out.extend(o.iter().map(|v| (v / 32768.0).clamp(-1.0, 1.0))); }
+        }
+        self.pend.drain(..n);
+        out
     }
 }
 
@@ -189,7 +215,7 @@ impl Audio {
             "briks".into(),
         ));
         let a = Arc::new(Audio { track, mic_muted: AtomicBool::new(false), deaf: AtomicBool::new(false), stop: AtomicBool::new(false), fake,
-            muted_peers: Default::default(), gains: Default::default(), sinks: Default::default(), cap: Default::default(), in_gain: AtomicU32::new(1.0f32.to_bits()), out_gain: AtomicU32::new(1.0f32.to_bits()), gate_db: AtomicU32::new(f32::NAN.to_bits()), noise: AtomicU8::new(0), nf: Mutex::new(NoiseFilter::new()), echo: AtomicBool::new(true), aec: Default::default(), aec_ref: Default::default(), mic_dev: Default::default(), out_dev: Default::default(), dev_gen: AtomicU32::new(0), fake_mic: Mutex::new(FakeMic::from_env()), fake_opens: AtomicU32::new(0), mic_code: Default::default(), pending_notice: Default::default(), retry_ms: AtomicU64::new(std::env::var("BRIKS_AUDIO_RETRY_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(500)), stats: Default::default(), sent_frames: AtomicU64::new(0), ev });
+            muted_peers: Default::default(), gains: Default::default(), sinks: Default::default(), cap: Default::default(), in_gain: AtomicU32::new(1.0f32.to_bits()), out_gain: AtomicU32::new(1.0f32.to_bits()), gate_db: AtomicU32::new(f32::NAN.to_bits()), noise: AtomicU8::new(0), nf: Mutex::new(NoiseFilter::new()), rnn: Mutex::new(Rnn::new()), echo: AtomicBool::new(true), aec: Default::default(), aec_ref: Default::default(), mic_dev: Default::default(), out_dev: Default::default(), dev_gen: AtomicU32::new(0), fake_mic: Mutex::new(FakeMic::from_env()), fake_opens: AtomicU32::new(0), mic_code: Default::default(), pending_notice: Default::default(), retry_ms: AtomicU64::new(std::env::var("BRIKS_AUDIO_RETRY_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(500)), stats: Default::default(), sent_frames: AtomicU64::new(0), ev });
         (a, rx)
     }
 
@@ -222,7 +248,7 @@ impl Audio {
     /// Aplica todas as Configurações > Voz (ganhos, porta, supressão e dispositivos). Mudar dispositivo reabre os fluxos.
     pub fn apply_cfg(&self, c: &AudioCfg) {
         self.set_audio_cfg(c.in_gain, c.out_gain, c.gate_db);
-        self.noise.store(c.noise.min(1), Ordering::Relaxed);
+        self.noise.store(c.noise.min(2), Ordering::Relaxed);
         self.echo.store(c.echo, Ordering::Relaxed);
         let mut changed = false;
         { let mut m = self.mic_dev.lock().unwrap(); if *m != c.mic { *m = c.mic.clone(); changed = true; } }
@@ -394,7 +420,12 @@ impl Audio {
             aec_out = t; &aec_out[..]
         } else { self.aec_ref.lock().unwrap().clear(); mono48 };
         let tmp;
-        let mono48 = if self.noise.load(Ordering::Relaxed) == 0 { let mut t = mono48.to_vec(); self.nf.lock().unwrap().process(&mut t); tmp = t; &tmp[..] } else { mono48 };
+        let mono48 = match self.noise.load(Ordering::Relaxed) {
+            0 => { let mut t = mono48.to_vec(); self.nf.lock().unwrap().process(&mut t); tmp = t; &tmp[..] }
+            2 => { tmp = self.rnn.lock().unwrap().process(mono48); &tmp[..] }
+            _ => mono48,
+        };
+        if mono48.is_empty() { return; }
         let proc = process_input(mono48, f32::from_bits(self.in_gain.load(Ordering::Relaxed)), if gate.is_nan() { None } else { Some(gate) });
         let mut c = self.cap.lock().unwrap();
         c.extend(proc.iter().copied());
@@ -646,6 +677,7 @@ impl MicTest {
             let fake = fake || fm.is_some();
             let buf: Arc<Mutex<VecDeque<f32>>> = Default::default();
             let mut nf = NoiseFilter::new();
+            let mut rnn = Rnn::new();
             let mut keep: Option<cpal::Stream> = None;
             if !fake {
                 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -680,7 +712,7 @@ impl MicTest {
                     (0..2400).map(|_| { let v = 0.3 * phase.sin(); phase += 2.0 * std::f32::consts::PI * 440.0 / RATE as f32; v }).collect()
                 } else { buf.lock().unwrap().drain(..).collect() };
                 if x.is_empty() { continue; }
-                if cfg.noise == 0 { nf.process(&mut x); }
+                if cfg.noise == 0 { nf.process(&mut x); } else if cfg.noise == 2 { x = rnn.process(&x); if x.is_empty() { continue; } }
                 let p = process_input(&x, cfg.in_gain, cfg.gate_db);
                 send((rms(&p) * 5.0).clamp(0.0, 1.0), None);
             }
@@ -837,6 +869,70 @@ mod unit {
         let mut nf2 = NoiseFilter::new();
         let mut dc = vec![0.2f32; 9600]; nf2.process(&mut dc);
         assert!(rms(&dc[8000..]) < 0.02, "DC removido");
+    }
+
+    fn synth_noise(seed: &mut u32, n: usize, amp: f32) -> Vec<f32> { (0..n).map(|_| { *seed = seed.wrapping_mul(1664525).wrapping_add(1013904223); ((*seed >> 8) as f32 / 8388608.0 - 1.0) * amp }).collect() }
+    /// "Voz" sintética: harmônicos de 150 Hz com envelope de sílabas (RNNoise a trata como fala; um tom puro ele pode tratar como ruído).
+    fn synth_voice(n: usize, t0: usize) -> Vec<f32> { (0..n).map(|k| { let t = (t0 + k) as f32 / 48000.0; let env = 0.5 + 0.5 * (2.0 * std::f32::consts::PI * 4.0 * t).sin().abs(); (1..=12).map(|h| (2.0 * std::f32::consts::PI * 150.0 * h as f32 * t).sin() / h as f32).sum::<f32>() * 0.25 * env }).collect() }
+
+    #[test]
+    fn rnnoise_cuts_steady_noise() {
+        let mut seed = 7u32;
+        let mut r = Rnn::new();
+        let (mut before, mut after) = (0.0f32, 0.0f32);
+        for k in 0..300 {
+            let c = synth_noise(&mut seed, 960, 0.03);
+            let o = r.process(&c);
+            assert_eq!(o.len(), 960, "bloco de 960 entra, 960 sai");
+            if k >= 200 { before += rms(&c); after += rms(&o); }
+        }
+        assert!(after < before * 0.25, "ruído estacionário cai mais de 12 dB: {} -> {}", before, after);
+    }
+
+    #[test]
+    fn rnnoise_keeps_voice_and_state_across_frames() {
+        let mut seed = 3u32;
+        let mut r = Rnn::new();
+        let (mut ein, mut eout) = (0.0f32, 0.0f32);
+        for k in 0..250 {
+            let mut c = synth_voice(960, k * 960);
+            for (a, b) in c.iter_mut().zip(synth_noise(&mut seed, 960, 0.01)) { *a += b; }
+            let o = r.process(&c);
+            if k >= 100 { ein += rms(&c); eout += rms(&o); }
+        }
+        assert!(eout > ein * 0.4, "voz não é destruída: {} -> {}", ein, eout);
+        // estado entre quadros: mesma entrada picotada em pedaços irregulares dá a mesma saída que de uma vez
+        let sig: Vec<f32> = synth_voice(9600, 0);
+        let (mut a, mut b) = (Rnn::new(), Rnn::new());
+        let whole = a.process(&sig);
+        let mut parts = vec![]; let mut p = 0; for len in [100usize, 333, 1, 2000, 512, 77].iter().cycle() { if p >= sig.len() { break; } let e = (p + len).min(sig.len()); parts.extend(b.process(&sig[p..e])); p = e; }
+        assert_eq!(whole.len(), parts.len());
+        assert!(whole.iter().zip(&parts).all(|(x, y)| (x - y).abs() < 1e-6), "picotar a entrada não muda a saída");
+    }
+
+    #[test]
+    fn rnnoise_latency_and_warmup() {
+        let mut r = Rnn::new();
+        assert!(r.process(&vec![0.1; 479]).is_empty(), "meio bloco espera");
+        let o = r.process(&[0.1]);
+        assert_eq!(o.len(), 480, "completou o bloco: sai na hora (atraso máximo = 1 bloco, 10 ms)");
+        assert!(o.iter().all(|v| *v == 0.0), "primeiro bloco (aquecimento) em silêncio");
+        let o2 = r.process(&vec![0.1; 480]);
+        assert_eq!(o2.len(), 480);
+        assert!(o2.iter().all(|v| v.abs() <= 1.0));
+        assert_eq!(r.process(&vec![2.0; 480]).len(), 480, "entrada fora de escala não estoura");
+    }
+
+    #[test]
+    fn rnnoise_cpu_cost() {
+        let mut r = Rnn::new(); let mut seed = 1u32;
+        let c = synth_noise(&mut seed, 960, 0.05);
+        for _ in 0..50 { r.process(&c); }
+        let t = std::time::Instant::now();
+        for _ in 0..500 { r.process(&c); }
+        let per_frame_us = t.elapsed().as_micros() as f32 / 500.0;
+        eprintln!("RNNoise: {:.0} us por quadro de 20 ms = {:.2}% de um núcleo", per_frame_us, per_frame_us / 200.0);
+        assert!(per_frame_us < 5000.0, "deve caber folgado em 20 ms");
     }
 
     #[test]
