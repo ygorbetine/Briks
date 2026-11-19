@@ -318,7 +318,8 @@ static void build_sm(aop_t *o) {
     free(o->sm); o->sm = sm; o->nsm = n;
 }
 
-typedef struct { char base[176]; char loc[184]; asurf_t sf; bool cursor; cui_vec2 cur; float cur_r; bool dark_halo; } apaint_t;
+typedef struct { char base[176]; char loc[184]; asurf_t sf; bool cursor; cui_vec2 cur; float cur_r; bool dark_halo; int glyph; } apaint_t;   /* glyph: ferramenta ativa, desenhada ao lado do ponteiro (0 = nenhuma) */
+static void paint_glyph(cui_ctx *ui, cui_rect r, void *u);
 
 static cui_color col_of(unsigned rgb, unsigned alpha) { return (cui_color){ (uint8_t)((rgb >> 16) & 255), (uint8_t)((rgb >> 8) & 255), (uint8_t)(rgb & 255), (uint8_t)alpha }; }
 static cui_vec2 to_scr(const cui_rect *r, const asurf_t *sf, float nx, float ny) { return (cui_vec2){ r->x + sf->ox + nx * sf->iw, r->y + sf->oy + ny * sf->ih }; }
@@ -390,6 +391,11 @@ static void paint_canvas(cui_ctx *ui, cui_rect r, void *user) {
         const cui_vec2 q = to_scr(&r, &p->sf, l->x, l->y); const float a = 1.0f - age;
         cui_draw_circle(ui, q, 3.0f + 7.0f * a, col_of(l->col, (unsigned)(60.0f * a)));
         cui_draw_circle(ui, q, 2.5f + 2.0f * a, col_of(l->col, (unsigned)(255.0f * a)));
+    }
+    if (p->glyph > 0) {   /* ícone da ferramenta ao lado do ponteiro, sobre um disco escuro (o ícone é claro e sumiria no papel branco) */
+        const cui_vec2 q = { r.x + p->cur.x + 20.0f, r.y + p->cur.y + 20.0f }; int g = p->glyph;
+        cui_draw_circle(ui, q, 14.0f, CUI_RGBA(0x14101fe6)); cui_draw_arc(ui, q, 14.0f, 0.0f, 6.2831853f, 1.2f, CUI_RGBA(0xc4b5fd90));
+        paint_glyph(ui, (cui_rect){ q.x - 10.0f, q.y - 10.0f, 20.0f, 20.0f }, &g);
     }
     if (p->cursor) { const cui_vec2 q = { r.x + p->cur.x, r.y + p->cur.y }; cui_draw_circle(ui, q, p->cur_r, CUI_RGBA(0xffffff30)); cui_draw_arc(ui, q, p->cur_r, 0.0f, 6.2831853f, 1.5f, CUI_RGBA(0xffffffd0)); }
     cui_pop_clip(ui);
@@ -650,6 +656,7 @@ void annot_surface(cui_ctx *ui, app_state_t *s, const actx_t *cx, const asurf_t 
     snprintf(pd.base, sizeof pd.base, "%s", cx->base); make_loc(cx->base, pd.loc, sizeof pd.loc); pd.sf = *sf;
     const cui_rect pr = cui_get_rect(ui, cui_make_id(ui, id)); const cui_vec2 mp = cui_mouse_pos(ui);
     const bool inside = pr.w > 0 && mp.x >= pr.x && mp.y >= pr.y && mp.x < pr.x + pr.w && mp.y < pr.y + pr.h;
+    if (interactive && inside && g_tool != T_NONE && !briks_covered(ui) && !briks_blocked()) { pd.glyph = g_tool; pd.cur = (cui_vec2){ mp.x - pr.x, mp.y - pr.y }; }
     if (interactive && inside && (g_tool == T_ERASE || g_tool == T_ERASE_AREA) && !briks_covered(ui)) { pd.cursor = true; pd.cur = (cui_vec2){ mp.x - pr.x, mp.y - pr.y }; pd.cur_r = g_tool == T_ERASE ? 9.0f : 16.0f; }
     cui_canvas_result r = cui_canvas(ui, id, CUI_FILL, CUI_FILL, paint_canvas, &pd, sizeof pd);
     if (laser_any_for(cx->base)) cui_request_wakeup(ui, 0.016f);

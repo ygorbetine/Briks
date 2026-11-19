@@ -1,7 +1,7 @@
 # AMI-16 Desconectar P2P (menu do amigo + confirmação + estado "desconectado") e AMI-15 sino por amigo. Demo social, hub de Amigos, chamada aberta (BRIKS_DEMO_P2P)
 snap a0
 tap 1237 297
-tap 1163 405
+tap 1163 439
 snap a1
 mtap 785 494   # botão Desconectar do diálogo
 snap a2

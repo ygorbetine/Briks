@@ -1,0 +1,15 @@
+# Board: o ponteiro mostra o icone da ferramenta ativa
+waitms 1500
+click 700 35
+waitms 600
+at 500 300
+waitms 300
+shot c_caneta
+click 47 313
+at 700 400
+waitms 300
+shot c_linha
+click 79 376
+at 700 400
+waitms 300
+shot c_borracha

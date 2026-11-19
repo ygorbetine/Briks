@@ -182,6 +182,7 @@
       { "item": "CHM-33", "de": "s1-sem-sinal", "para": "s2-um-saiu", "esperado": "muda", "min": 100 } ] },
     { "id": "anot-tile", "demo": "call", "roteiro": "anot-tile.txt", "env": { "BRIKS_DEMO_PEERS": "3", "BRIKS_DEV_SHARE": "demo-zoom" }, "checagens": [] },
     { "id": "anot-board-grade", "demo": "call", "roteiro": "anot-board-grade.txt", "env": { "BRIKS_DEMO_PEERS": "3" }, "checagens": [] },
+    { "id": "anot-board-cursor", "demo": "call", "roteiro": "anot-board-cursor.txt", "env": { "BRIKS_DEMO_PEERS": "3" }, "checagens": [] },
     { "id": "anot-board-barra", "demo": "call", "roteiro": "anot-board-barra.txt", "env": { "BRIKS_DEMO_PEERS": "3" }, "checagens": [] },
     { "id": "anot-board", "demo": "call", "roteiro": "anot-board.txt", "env": { "BRIKS_DEMO_PEERS": "3", "BRIKS_EXPORT_FILE": "C:/Users/Public/anot-board-export.png" }, "checagens": [] },
     { "id": "transmissao-clique-bloco", "demo": "call", "roteiro": "transmissao-clique-bloco.txt", "env": { "BRIKS_DEMO_PEERS": "3", "BRIKS_DEV_SHARE": "demo-remote" }, "checagens": [] },
