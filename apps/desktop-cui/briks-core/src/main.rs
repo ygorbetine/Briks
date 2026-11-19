@@ -37,6 +37,7 @@ mod mock;
 mod netlog;
 mod netmode;
 mod phoenix;
+mod probe;
 mod procaudio;
 mod realtime;
 mod hybrid;

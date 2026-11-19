@@ -38,6 +38,8 @@ static int g_tiles;                                 /* blocos desenhados no palc
 static struct { int slot; double until; } g_notice = { -1, -1 };
 static bool share_viewing(const app_state_t *s) { return s->screen == SCREEN_CALL && s->call_mode == 1 && s->call_view == 0; }
 static const char *const CODEC_NAME[3] = { "h264", "vp9", "vp8" };   /* 1.4.4: índice de share_state_t.codec */
+static bool g_probe_busy; static unsigned long long g_probe_t0; static char g_probe_note[160];   /* "Testar meu PC" (codec.probe) em andamento e aviso de falha */
+static int g_probe_sent;   /* roteiros: quantos testes foram pedidos ao core */
 static int g_qk[2];   /* teste qual-slots: kbps pedido a cada transmissão */
 static bool g_dev_open_quality;   /* gancho de captura: abre o popover de qualidade/telemetria */
 
@@ -221,6 +223,19 @@ static void preview_path(char *out, size_t cap) { preview_path_n(out, cap, false
 
 /* ---------- comandos ---------- */
 void share_open_dialog(app_state_t *s) {
+/* ---------- codec Automático ---------- */
+/* O modo Automático usa o resultado do último "Testar meu PC" (guardado em settings.cfg); sem teste ainda, H.264, que roda em qualquer PC. */
+static int codec_effective(const share_state_t *q) {
+    if (settings_codec_mode() != 0) return settings_codec_mode() - 1;   /* manual: 1 H.264, 2 VP9, 3 VP8 */
+    const char *r = settings_codec_rec();
+    return !strcmp(r, "vp9") ? 1 : !strcmp(r, "vp8") ? 2 : 0;
+}
+static void probe_start(const share_state_t *q) {
+    if (g_probe_busy || core_state() != CORE_READY) return;
+    char line[96]; snprintf(line, sizeof line, "{\"cmd\":\"codec.probe\",\"height\":%d,\"fps\":%d,\"id\":\"codec\"}", RES_H[q->res], FPS_V[q->fps]);
+    cmd(line); g_probe_busy = true; g_probe_t0 = GetTickCount64(); g_probe_note[0] = 0; g_probe_sent++;
+}
+
     share_state_t *q = &s->sh;
     q->dialog_open = true; q->err[0] = 0; q->pick_second = false;
     if (!q->second.active && !q->second.starting) qual_switch(q, 0);   /* sem 2ª tela no ar o seletor edita a 1ª */
@@ -240,7 +255,8 @@ static void send_start(app_state_t *s, const char *kind, const char *id, const c
     const qual_t qprev = qual_enter(q, 0);
     for (int i = 0; i < q->napps && o < sizeof pids - 16; i++) if (q->apps[i].on) o += (size_t)snprintf(pids + o, sizeof pids - o, "%s%u", o ? "," : "", q->apps[i].pid);
     snprintf(line, sizeof line, "{\"cmd\":\"share.start\",\"kind\":\"%s\",\"id\":\"%s\",\"height\":%d,\"fps\":%d,\"kbps\":%d,\"label\":\"%s\",\"audio\":\"%s\",\"pids\":[%s],\"content\":\"%s\",\"codec\":\"%s\"}",
-             kind, id, RES_H[q->res], FPS_V[q->fps], chosen_kbps(q), lab, q->audio_mode == 0 ? "source" : q->audio_mode == 1 ? "apps" : "none", pids, q->content ? "motion" : "detail", CODEC_NAME[q->codec]);
+             kind, id, RES_H[q->res], FPS_V[q->fps], chosen_kbps(q), lab, q->audio_mode == 0 ? "source" : q->audio_mode == 1 ? "apps" : q->audio_mode == 3 ? "all" : "none", pids, q->content ? "motion" : "detail", CODEC_NAME[codec_effective(q)]);
+    if (settings_codec_mode() == 0 && !settings_codec_rec()[0]) probe_start(q);   /* Automático sem nenhum teste ainda: testa uma vez */
     qual_leave(q, qprev);
     cmd(line);
     copy(q->last_kind, sizeof q->last_kind, kind); copy(q->last_id, sizeof q->last_id, id); copy(q->label, sizeof q->label, label);
@@ -254,7 +270,7 @@ static void send_start_second(app_state_t *s, const char *kind, const char *id, 
     json_escape(label, lab, sizeof lab);
     const qual_t qprev = qual_enter(q, 1);
     snprintf(line, sizeof line, "{\"cmd\":\"share.start\",\"slot\":1,\"kind\":\"%s\",\"id\":\"%s\",\"height\":%d,\"fps\":%d,\"kbps\":%d,\"label\":\"%s\",\"audio\":\"none\",\"content\":\"%s\",\"codec\":\"%s\"}",
-             kind, id, RES_H[q->res], FPS_V[q->fps], chosen_kbps(q), lab, q->content ? "motion" : "detail", CODEC_NAME[q->codec]);
+             kind, id, RES_H[q->res], FPS_V[q->fps], chosen_kbps(q), lab, q->content ? "motion" : "detail", CODEC_NAME[codec_effective(q)]);
     qual_leave(q, qprev);
     cmd(line);
     copy(q->second.label, sizeof q->second.label, label); copy(q->second.kind, sizeof q->second.kind, kind); copy(q->second.id, sizeof q->second.id, id);
@@ -365,6 +381,12 @@ bool share_handle_event(app_state_t *s, const jval *j, const char *ev) {
         }
     } else if (!strcmp(ev, "share.viewers")) {   /* core: {slot, count, peers:[ids]}; nunca conta o próprio usuário */
         const int sl = jint(j, "slot") == 1 ? 1 : 0; q->vknown[sl] = true; q->viewers[sl] = jint(j, "count"); q->vnames[sl][0] = 0;
+    if (!strcmp(ev, "codec.result")) {   /* resposta do "Testar meu PC": guarda a recomendação e o motivo (persistem em settings.cfg) */
+        g_probe_busy = false;
+        if (jbool(j, "ok")) { settings_codec_result_set(json_str(j, "recommended", "h264"), jbool(j, "hardware"), jint(j, "height"), json_str(j, "reason", "")); g_probe_note[0] = 0; }
+        else copy(g_probe_note, sizeof g_probe_note, "O teste não deu certo. Tente de novo.");
+        return true;
+    }
         const jval *pl = json_get(j, "peers"); const int np = json_len(pl); int shown = 0;
         q->vidn[sl] = 0;   /* ids de quem assiste: o nome é resolvido na hora de desenhar (o nome pode chegar depois do aviso) */
         for (int k = 0; k < np && q->vidn[sl] < 10; k++) { const jval *e = json_at(pl, k); if (e && e->type == J_STR && e->str) snprintf(q->vids[sl][q->vidn[sl]++], sizeof q->vids[sl][0], "%s", e->str); }
@@ -886,23 +908,41 @@ static bool quality_controls(cui_ctx *ui, share_state_t *q) {
         cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL) {
             wrap_line(ui, "Se a rede ou o PC apertar, os quadros por segundo ficam fixos: cai a taxa de bits e, só se preciso, a resolução.", 11, CUI_RGBA(0xa592b8aa));
         }
-        cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .gap = 6, .wrap = true, .justify = CUI_JUSTIFY_BETWEEN, .align = CUI_ALIGN_CENTER) {
-            cui_column(ui, .gap = 1, .width = CUI_FILL) {
-                wrap_line(ui, "Codec de vídeo", 13, B_MUTED);
-                wrap_line(ui, q->codec == 1 ? "VP9: imagem mais nítida com a mesma internet, mas pesa mais no processador. Vale no servidor de chamadas e no modo direto; no modo direto, se alguém não conseguir abrir, o Briks volta sozinho ao H.264. Depois da 1ª transmissão da chamada, trocar o codec só vale na próxima chamada."
-                     : q->codec == 2 ? "VP8: mais antigo e leve, bom para PCs fracos, com qualidade um pouco menor. Vale no servidor de chamadas e no modo direto; no modo direto, se alguém não conseguir abrir, volta ao H.264. Depois da 1ª transmissão da chamada, trocar o codec só vale na próxima chamada."
-                     : "H.264: o mais comum. Funciona em qualquer PC, usa a placa de vídeo para não pesar e vale também no servidor de chamadas. Na dúvida, fique com ele.", 11, CUI_RGBA(0xa592b8aa));
+        {   /* 1.6: Automático (recomendado) + manuais; o teste do PC escolhe o codec ao iniciar */
+            const int cmode = settings_codec_mode();
+            if (g_probe_busy && GetTickCount64() - g_probe_t0 > 20000ull) { g_probe_busy = false; copy(g_probe_note, sizeof g_probe_note, "O teste demorou demais. Tente de novo."); }
+            cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .gap = 6, .wrap = true, .justify = CUI_JUSTIFY_BETWEEN, .align = CUI_ALIGN_CENTER) {
+                cui_column(ui, .gap = 1, .width = CUI_FILL) {
+                    wrap_line(ui, "Codec de vídeo", 13, B_MUTED);
+                    wrap_line(ui, cmode == 0 ? "Automático (recomendado): o Briks testa o seu PC e escolhe sozinho o codec que roda mais folgado. Você pode refazer o teste quando quiser."
+                         : cmode == 2 ? "VP9: imagem mais nítida com a mesma internet, mas pesa mais no processador. Vale no servidor de chamadas e no modo direto; no modo direto, se alguém não conseguir abrir, o Briks volta sozinho ao H.264. Depois da 1ª transmissão da chamada, trocar o codec só vale na próxima chamada."
+                         : cmode == 3 ? "VP8: mais antigo e leve, bom para PCs fracos, com qualidade um pouco menor. Vale no servidor de chamadas e no modo direto; no modo direto, se alguém não conseguir abrir, volta ao H.264. Depois da 1ª transmissão da chamada, trocar o codec só vale na próxima chamada."
+                         : "H.264: o mais comum. Funciona em qualquer PC, usa a placa de vídeo para não pesar e vale também no servidor de chamadas.", 11, CUI_RGBA(0xa592b8aa));
+                }
+                static const char *const cd[4] = { "Automático", "H.264", "VP9", "VP8" };
+                int ci = cmode;
+                if (seg(ui, "codec", cd, NULL, 4, &ci)) { settings_codec_mode_set(ci); if (ci > 0) q->codec = ci - 1; ch = true; }
             }
-            static const char *const cd[3] = { "H.264", "VP9", "VP8" };
-            ch |= seg(ui, "codec", cd, NULL, 3, &q->codec);
+            if (cmode > 0) q->codec = cmode - 1;
+            cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .gap = 8, .wrap = true, .align = CUI_ALIGN_CENTER) {
+                if (cui_button(ui, g_probe_busy ? "Testando…" : "Testar meu PC", .variant = CUI_BUTTON_SECONDARY, .size = CUI_SIZE_SM, .disabled = g_probe_busy || core_state() != CORE_READY)) probe_start(q);
+                if (core_state() != CORE_READY) wrap_line(ui, "Entre numa sala para testar.", 11, CUI_RGBA(0xa592b8aa));
+                else if (g_probe_busy) wrap_line(ui, "Medindo por uns 3 segundos…", 11, CUI_RGBA(0xa592b8aa));
+            }
+            if (g_probe_note[0]) wrap_line(ui, g_probe_note, 11, CUI_RGBA(0xf0c26ecc));
+            else if (settings_codec_rec()[0] && !g_probe_busy) {
+                char tl[420]; snprintf(tl, sizeof tl, "%s%s", settings_codec_msg(), cmode == 0 ? "" : " (O modo Automático está desligado.)");
+                if (settings_codec_h() && settings_codec_h() != RES_H[q->res]) { size_t n = strlen(tl); snprintf(tl + n, sizeof tl - n, " Testado em %dp.", settings_codec_h()); }
+                wrap_line(ui, tl, 11, CUI_RGBA(0x8fd9a8cc));
+            }
         }
         if (q->active && q->codec_on[0]) {
             int on = !strcmp(q->codec_on, "vp9") ? 1 : !strcmp(q->codec_on, "vp8") ? 2 : 0;
             static const char *const nm[3] = { "H.264", "VP9", "VP8" };
             char cl[200];
-            if (on == q->codec) snprintf(cl, sizeof cl, "Em uso agora: %s", nm[on]);
-            else snprintf(cl, sizeof cl, "Em uso agora: %s. %s só vale na próxima chamada, ou se todos na chamada o abrirem (no modo direto).", nm[on], nm[q->codec]);
-            wrap_line(ui, cl, 11, on == q->codec ? CUI_RGBA(0x8fd9a8cc) : CUI_RGBA(0xf0c26ecc));
+            if (on == want) snprintf(cl, sizeof cl, "Em uso agora: %s", nm[on]);
+            else snprintf(cl, sizeof cl, "Em uso agora: %s. %s só vale na próxima chamada, ou se todos na chamada o abrirem (no modo direto).", nm[on], nm[want]);
+            wrap_line(ui, cl, 11, on == want ? CUI_RGBA(0x8fd9a8cc) : CUI_RGBA(0xf0c26ecc));
         }
         cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .gap = 6, .wrap = true, .justify = CUI_JUSTIFY_BETWEEN, .align = CUI_ALIGN_CENTER) {
             cui_text(ui, "Bitrate", .size = 13, .color = B_MUTED);
@@ -941,6 +981,7 @@ static void send_audio_live(app_state_t *s) {
 }
 static void share_audio_live(cui_ctx *ui, app_state_t *s) {
     share_state_t *q = &s->sh;
+            const int want = codec_effective(q);
     static double last_poll; if (cui_time(ui) - last_poll > 2.0) { last_poll = cui_time(ui); cmd("{\"cmd\":\"share.audio.list\"}"); }
     cui_request_wakeup(ui, 1.0f);
     cui_text(ui, "Som da transmissão", .font = CUI_FONT_DISPLAY, .size = 15);
@@ -1490,6 +1531,11 @@ static bool emit_tile(cui_ctx *ui, app_state_t *s, int key, bool compact) {
     snprintf(chip, sizeof chip, "%s · %d FPS · %s%s", res_name(q->remote[i].h), q->remote[i].fps, r, q->remote[i].audio ? " · com áudio" : "");
     if (q->remote[i].poor) snprintf(chip, sizeof chip, "Conexão instável: a imagem pode ficar parada");
     if (!q->remote[i].vol_set) { q->remote[i].vol_set = true; q->remote[i].volume = 1.0f; }
+    if (!strcmp(n, "codec_mode")) return settings_codec_mode();
+    if (!strcmp(n, "codec_effective")) return codec_effective(&s->sh);
+    if (!strcmp(n, "codec_probe_sent")) return g_probe_sent;
+    if (!strcmp(n, "codec_probe_busy")) return g_probe_busy;
+    if (!strcmp(n, "codec_hw")) return settings_codec_hw();
     float before = q->remote[i].volume;
     bool c = video_tile(ui, i, has ? g_fv[i].tex : 0, g_fv[i].w, g_fv[i].h, title, chip, q->remote[i].stalled ? "Sem sinal da transmissão…" : q->remote[i].poor ? "Sua conexão não está dando conta desta transmissão" : "Carregando a transmissão…", q->remote[i].audio ? &q->remote[i].volume : NULL, &g_zoom[i], compact);
     if (fabsf(before - q->remote[i].volume) > 0.01f) {

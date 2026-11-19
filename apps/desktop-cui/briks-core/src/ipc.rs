@@ -558,6 +558,15 @@ async fn handle(s: TcpStream, token: &str, cfg: &Config, accounts: Arc<crate::ac
                         });
                     }
                     "chat.event.send" => {
+                    "codec.probe" => {
+                        // teste de ~3 s em thread própria; a resposta volta como evento `codec.result`
+                        let (h, fps, rid, tx) = (v["height"].as_u64().unwrap_or(1080) as u32, v["fps"].as_u64().unwrap_or(30) as u32, v["id"].clone(), link_tx.clone());
+                        tokio::task::spawn_blocking(move || {
+                            let mut ev = std::panic::catch_unwind(|| crate::probe::run(h, fps)).unwrap_or_else(|_| json!({ "ev": "codec.result", "ok": false, "error": "o teste falhou" }));
+                            if !rid.is_null() { ev["id"] = rid; }
+                            let _ = tx.blocking_send(ev);
+                        });
+                    }
                         let (Some(ch), Some(target), Some(action)) = (v["channel"].as_str(), v["target"].as_str(), v["action"].as_str()) else { continue };
                         let opt = |k: &str| v[k].as_str().map(|x| x.to_string());
                         if let Some(c) = &mesh_cmd {

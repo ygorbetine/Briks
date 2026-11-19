@@ -160,6 +160,10 @@
       { "item": "CHM-31", "de": "u1-sem", "para": "u2-com", "esperado": "muda", "min": 20 } ] },
     { "id": "transmissao-qualidade", "demo": "call", "roteiro": "transmissao-qualidade.txt", "env": { "BRIKS_DEMO_PEERS": "3", "BRIKS_DEV_SHARE": "qual-slots" }, "checagens": [
       { "item": "CHM-34", "de": "q-antes", "para": "q-selecionada-2", "esperado": "muda", "min": 100 } ] },
+    { "id": "transmissao-codec-auto", "demo": "call", "roteiro": "transmissao-codec-auto.txt", "env": { "BRIKS_DEMO_PEERS": "3", "BRIKS_DEV_SHARE": "demo-quality" }, "checagens": [
+      { "item": "TRX-CODEC-AUTO", "de": "c-auto-sem-teste", "para": "c-auto-vp9", "esperado": "muda", "min": 20 },
+      { "item": "TRX-CODEC-AUTO", "de": "c-auto-vp9", "para": "c-auto-h264", "esperado": "muda", "min": 20 },
+      { "item": "TRX-CODEC-AUTO", "de": "c-auto-h264", "para": "c-auto-falhou", "esperado": "muda", "min": 20 } ] },
     { "id": "convite-curto", "demo": "group", "roteiro": "convite-curto.txt", "checagens": [
       { "item": "GRP-30", "de": "k0-longo", "para": "k1-indisponivel", "esperado": "muda", "min": 50 },
       { "item": "GRP-30", "de": "k1-indisponivel", "para": "k2-curto", "esperado": "muda", "min": 50 } ] },

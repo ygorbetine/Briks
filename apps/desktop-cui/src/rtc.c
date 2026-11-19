@@ -374,7 +374,7 @@ bool rtc_handle_event(app_state_t *s, const char *line) {
         snprintf(s->net_note, sizeof s->net_note, "%s · %s%s%s%s%s", !strcmp(md, "sfu") ? "Servidor" : !strcmp(md, "none") ? "Sem chamada" : "Direto", json_str(j, "reason", ""),
                  json_str(j, "server", "")[0] ? " · servidor " : "", json_str(j, "server", ""), er[0] ? " · " : "", er);
         changed = true;
-    } else if (!strncmp(ev, "share.", 6)) {
+    } else if (!strncmp(ev, "share.", 6) || !strcmp(ev, "codec.result")) {
         if (!strcmp(ev, "share.local") && !strcmp(json_str(j, "state", ""), "off") && json_str(j, "reason", "")[0]) { char nt[120]; snprintf(nt, sizeof nt, "Transmissão: %s", json_str(j, "reason", "")); settings_notice(nt); }   /* a transmissão caiu/não iniciou */
         changed = share_handle_event(s, j, ev);
     } else if (!strncmp(ev, "cam.", 4)) {

@@ -1,0 +1,23 @@
+# 1.6: codec "Automático (recomendado)" + "Testar meu PC" no painel de qualidade da transmissão. Sem core: o evento codec.result do teste é injetado (coreev).
+waitms 1500
+expect codec_mode 0
+expect codec_effective 0
+expect codec_probe_sent 0
+shot c-auto-sem-teste
+# PC sem placa e processador forte: o core recomenda VP9 e o Automático passa a usar VP9 ao iniciar
+coreev {"ev":"codec.result","ok":true,"recommended":"vp9","hardware":false,"height":1080,"reason":"Seu processador é forte (8 núcleos): VP9 dá imagem mais nítida com a mesma internet.","hw_name":null,"threads":16,"cores":8,"results":[]}
+waitms 500
+expect codec_effective 1
+expect codec_hw 0
+shot c-auto-vp9
+# PC com placa NVIDIA: H.264 por placa
+coreev {"ev":"codec.result","ok":true,"recommended":"h264","hardware":true,"height":1080,"reason":"Seu PC tem placa NVIDIA: use H.264, quase não usa o processador.","hw_name":"NVIDIA H.264 Encoder MFT","threads":16,"cores":8,"results":[]}
+waitms 500
+expect codec_effective 0
+expect codec_hw 1
+shot c-auto-h264
+# teste que falhou no core: aviso, a recomendação anterior continua valendo
+coreev {"ev":"codec.result","ok":false,"error":"o teste falhou"}
+waitms 400
+expect codec_effective 0
+shot c-auto-falhou
