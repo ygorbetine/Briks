@@ -126,6 +126,7 @@ void notify_tick(app_state_t *s) {
     }
     if (!g_un_loaded) { un_load(); g_last_total = -1; }
     notify_chat_opened(s);
+    nudge_tick(s);
     int total = sm_unread_total(&g_un), in_call = s->in_room ? 1 : 0;
     if (total != g_last_total || in_call != g_last_in_call) {
         if (total != g_last_total) un_save();

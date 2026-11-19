@@ -14,6 +14,11 @@ typedef struct {
     int sound_vol;         /* 0..100 */
     bool mic_on, deaf;     /* estado do microfone e do ensurdecer, lembrado entre chamadas e sessões */
     bool tray_hint_shown;  /* já avisou "continua na bandeja" */
+    bool nudge_on;         /* "Chamar atenção": receber (tela tremendo) de amigos; padrão ligado */
+    int nudge_mode;        /* 0 tela inteira, 1 só a janela do Briks, 2 só aviso */
+    bool nudge_sound;      /* som curto ao receber */
+    long long dnd_until;   /* Não perturbar: 0 desligado, -1 até eu desligar, >0 até esse instante (s Unix) */
+    bool dnd_calls;        /* Não perturbar também silencia o toque de chamada (padrão desligado) */
     int win_x, win_y, win_w, win_h; bool win_max; bool win_valid;   /* última janela (retângulo externo normal) */
 } sys_cfg_t;
 extern sys_cfg_t g_sys;
@@ -71,6 +76,17 @@ bool notify_take_click(char *chan, size_t cap);          /* conversa do último 
 void notify_set_force_focus(int v);                      /* teste: -1 real, 0/1 força "janela em foco" */
 int  notify_force_focus(void);
 void notify_set_grace_ms(unsigned ms);
+/* nudge.c: "Chamar atenção" */
+bool nudge_send(app_state_t *s, int friend_idx);          /* envia (limites 15 s/amigo e 6/min); mostra o aviso ao remetente; true = enviado */
+void nudge_core_event(app_state_t *s, const struct jval *j);   /* dm.signal kind=nudge do core */
+void nudge_tick(app_state_t *s);                          /* a cada quadro: fim do Não perturbar por tempo */
+bool nudge_send_peer(app_state_t *s, int slot);         /* pelo bloco da chamada (amigo achado por id/fp) */
+bool nudge_dnd_active(void);
+void nudge_dnd_set(int minutes, bool on);                 /* minutes <= 0 = até eu desligar */
+bool nudge_dnd_silences_calls(void);                      /* Não perturbar ativo E "também silencia chamadas" (para o toque da chamada consultar) */
+void nudge_settings(cui_ctx *ui);                         /* cartão "CHAMAR ATENÇÃO" (aba Notificações) */
+int  nudge_probe(const char *name);                       /* roteiro: expect nudge_* */
+bool nudge_script(const char *args);                      /* roteiro: sys nudge ... */
 /* settings.c */
 bool settings_nt_online(void);
 bool settings_nt_stream(void);

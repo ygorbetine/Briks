@@ -494,7 +494,7 @@ static void content(cui_ctx *ui, app_state_t *s) {
             if (!group) dmcall_button(ui, s);   /* Ligar: chamada individual */
             msgui_pinned_button(ui, s);
             attach_search_button(ui);
-            if (!group && cui_icon_button(ui, CUI_ICON_BELL, .tooltip = "Chamar atenção (faz a tela dele tremer)")) nudge_send(s, s->active_friend);
+            if (!group && cui_icon_button(ui, CUI_ICON_ZAP, .tooltip = "Chamar atenção (faz a tela dele tremer)")) nudge_send(s, s->active_friend);
         }
         cui_separator(ui);
         friends_notify_banner(ui, s);

@@ -166,6 +166,7 @@ void friends_notify_tick(app_state_t *s) {
     prev_n = n;
     if (fn_until && now > fn_until) { fn_until = 0; fn_text[0] = 0; cui_request_redraw(cui_app_ui(s->app)); }
 }
+void friends_banner_text(const char *text) { snprintf(fn_text, sizeof fn_text, "%s", text ? text : ""); fn_until = GetTickCount64() + 4000; }   /* nudge.c: confirmação ao remetente */
 void friends_notify_banner(cui_ctx *ui, app_state_t *s) {
     (void)s; if (!fn_until || !fn_text[0]) return;
     cui_box(ui, .dir = CUI_ROW, .width = CUI_FILL, .pad_x = 18, .pad_y = 6) {

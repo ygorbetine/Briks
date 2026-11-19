@@ -13,7 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-sys_cfg_t g_sys = { .close_to_tray = true, .nt_msg = true, .sounds = true, .sound_vol = 70, .mic_on = true };
+sys_cfg_t g_sys = { .close_to_tray = true, .nt_msg = true, .sounds = true, .sound_vol = 70, .mic_on = true, .nudge_on = true, .nudge_sound = true };
 
 #define WM_TRAY (WM_APP + 0x41)
 #define SYS_TIMER 7701
@@ -38,6 +38,7 @@ static const struct { const char *k; char t; void *p; } CF[] = {
     { "close_to_tray", 'b', &g_sys.close_to_tray }, { "autostart", 'b', &g_sys.autostart }, { "nt_msg", 'b', &g_sys.nt_msg }, { "sounds", 'b', &g_sys.sounds },
     { "sound_vol", 'i', &g_sys.sound_vol }, { "mic_on", 'b', &g_sys.mic_on }, { "deaf", 'b', &g_sys.deaf }, { "tray_hint", 'b', &g_sys.tray_hint_shown }, { "win_x", 'i', &g_sys.win_x }, { "win_y", 'i', &g_sys.win_y },
     { "win_w", 'i', &g_sys.win_w }, { "win_h", 'i', &g_sys.win_h }, { "win_max", 'b', &g_sys.win_max }, { "win_valid", 'b', &g_sys.win_valid },
+    { "nudge_on", 'b', &g_sys.nudge_on }, { "nudge_mode", 'i', &g_sys.nudge_mode }, { "nudge_sound", 'b', &g_sys.nudge_sound }, { "dnd_until", 'l', &g_sys.dnd_until }, { "dnd_calls", 'b', &g_sys.dnd_calls },
 };
 static void cfg_load(void) {
     if (!cfg_path(g_cfg_file, sizeof g_cfg_file)) return;
@@ -45,21 +46,24 @@ static void cfg_load(void) {
     char ln[160];
     while (fgets(ln, sizeof ln, f)) {
         char *eq = strchr(ln, '='); if (!eq) continue; *eq = 0; char *v = eq + 1; v[strcspn(v, "\r\n")] = 0;
-        for (size_t i = 0; i < sizeof CF / sizeof *CF; i++) if (!strcmp(CF[i].k, ln)) { if (CF[i].t == 'i') *(int *)CF[i].p = atoi(v); else *(bool *)CF[i].p = atoi(v) != 0; }
+        for (size_t i = 0; i < sizeof CF / sizeof *CF; i++) if (!strcmp(CF[i].k, ln)) { if (CF[i].t == 'i') *(int *)CF[i].p = atoi(v); else if (CF[i].t == 'l') *(long long *)CF[i].p = _atoi64(v); else *(bool *)CF[i].p = atoi(v) != 0; }
     }
     fclose(f);
+    if (g_sys.nudge_mode < 0 || g_sys.nudge_mode > 2) g_sys.nudge_mode = 0;
+    if (g_sys.dnd_until < -1) g_sys.dnd_until = 0;
     if (g_sys.sound_vol < 0) g_sys.sound_vol = 0; if (g_sys.sound_vol > 100) g_sys.sound_vol = 100;
 }
 void sys_cfg_save(void) {
     if (!g_cfg_file[0]) return;
     FILE *f = fopen(g_cfg_file, "wb"); if (!f) return;
-    for (size_t i = 0; i < sizeof CF / sizeof *CF; i++) { if (CF[i].t == 'i') fprintf(f, "%s=%d\n", CF[i].k, *(int *)CF[i].p); else fprintf(f, "%s=%d\n", CF[i].k, *(bool *)CF[i].p ? 1 : 0); }
+    for (size_t i = 0; i < sizeof CF / sizeof *CF; i++) { if (CF[i].t == 'i') fprintf(f, "%s=%d\n", CF[i].k, *(int *)CF[i].p); else if (CF[i].t == 'l') fprintf(f, "%s=%lld\n", CF[i].k, *(long long *)CF[i].p); else fprintf(f, "%s=%d\n", CF[i].k, *(bool *)CF[i].p ? 1 : 0); }
     fclose(f); g_saves++;
 }
 
 bool sys_is_headless(void) { return g_headless; }
 bool sys_in_tray(void) { return g_in_tray && !g_headless; }   /* janela escondida: o laço principal desacelera (main.c) */
 void *sys_hwnd(void) { return g_hwnd; }
+app_state_t *sys_state(void) { return g_s; }
 bool sys_start_minimized(void) { return g_start_min; }
 bool sys_window_focused(void) {
     int f = notify_force_focus(); if (f >= 0) return f != 0;
@@ -329,6 +333,7 @@ int sys_probe(const char *n) {
     if (!strcmp(n, "sys_mic")) return g_sys.mic_on;   /* lembrado entre chamadas e aberturas (sistema.cfg) */
     if (!strcmp(n, "sys_deaf")) return g_sys.deaf;
     if (!strcmp(n, "tb_hit")) return titlebar_hit_result();
+    if (!strncmp(n, "nudge_", 6)) { int np = nudge_probe(n + 6); if (np != -9999) return np; }
     return titlebar_probe(n);
 }
 
@@ -366,6 +371,7 @@ bool sys_script(const char *args) {
     else if (!strcmp(c, "move") && n > 4 && g_hwnd) SetWindowPos(g_hwnd, NULL, atoi(t[1]), atoi(t[2]), atoi(t[3]), atoi(t[4]), SWP_NOZORDER | SWP_NOACTIVATE);
     else if (!strcmp(c, "sound") && n > 1) sound_play((sound_kind_t)atoi(t[1]));
     else if (!strcmp(c, "cfg") && n > 2) { bool v = atoi(t[2]) != 0; if (!strcmp(t[1], "close_to_tray")) g_sys.close_to_tray = v; else if (!strcmp(t[1], "nt_msg")) g_sys.nt_msg = v; else if (!strcmp(t[1], "sounds")) g_sys.sounds = v; }
+    else if (!strcmp(c, "nudge")) return nudge_script(rest1);   /* nudge <comando> (nudge.c) */
     else if (!strcmp(c, "ovl") && n > 1) { return overlay_script(rest1); }   /* ovl key | ovl line <texto do overlay> */
     else if (!strcmp(c, "tbhit") && n > 2) titlebar_script("tbhit", atoi(t[1]), atoi(t[2]));   /* tbhit X Y (pixels do cliente): guarda o WM_NCHITTEST desse ponto; expect tb_hit <n> */
     else if (!strcmp(c, "tbact") && n > 1) titlebar_script("tbact", !strcmp(t[1], "min") ? 0 : !strcmp(t[1], "max") ? 1 : 2, 0);

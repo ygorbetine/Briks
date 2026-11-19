@@ -339,6 +339,10 @@ bool rtc_handle_event(app_state_t *s, const char *line) {
         changed = chat_in_message(s, j, false);   /* DM: grava no histórico local, mostra na conversa aberta e avisa (chat.c) */
     } else if (!strcmp(ev, "chat.history")) {   /* mensagens que faltavam, vindas da sincronização com o amigo */
         changed = chat_in_message(s, j, true);
+    } else if (!strcmp(ev, "dm.signal") && !strcmp(json_str(j, "kind", ""), "nudge")) {   /* chamar atenção (nudge.c): só de amigo, no máx. 1 a cada 15 s */
+        nudge_core_event(s, j); changed = false;
+    } else if (!strcmp(ev, "dm.signal.gone") && !strcmp(json_str(j, "kind", ""), "nudge")) {
+        changed = false;
     } else if (!strcmp(ev, "dm.wake")) {   /* um amigo quer falar comigo e eu não estou em sala com ele: abre a minha ponta do canal direto */
         chat_dm_wake(s, json_str(j, "fp", "")); changed = false;
     } else if (!strcmp(ev, "dm.state")) {
