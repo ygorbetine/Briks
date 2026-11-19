@@ -51,7 +51,7 @@ static inline nm_action nm_decide(const nm_ctx *c) {
     if (c->in_tray) return NM_NOTICE;
     if (c->background) return NM_FLASH;
     if (c->mode == NM_MODE_NOTICE) return NM_NOTICE;
-    if (c->mode == NM_MODE_WINDOW) return c->maximized ? NM_NOTICE : NM_SHAKE_WINDOW;
+    if (c->mode == NM_MODE_WINDOW) return NM_SHAKE_WINDOW;   /* maximizada: treme a imagem da janela (nudge.c) */
     return NM_SHAKE_SCREEN;
 }
 

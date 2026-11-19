@@ -47,7 +47,7 @@ waitms 800
 sys nudge clock 61000
 sys nudge max 1
 coreev {"ev":"dm.signal","fp":"abababababababababababababababababababababababababababababababab","kind":"nudge","data":{"name":"Ana"}}
-expect nudge_action 4
+expect nudge_action 2
 sys nudge max 0
 # 7) segundo plano: pisca (3), sem tremer; bandeja: só aviso (4)
 sys nudge cfg mode 0

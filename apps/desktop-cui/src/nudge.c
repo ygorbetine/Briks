@@ -55,7 +55,7 @@ static void fx_free(void) {   /* a imagem capturada nunca fica na memória depoi
 }
 static void fx_end(void) {
     if (g_fx) { KillTimer(g_fx, FX_TIMER); HWND w = g_fx; g_fx = NULL; DestroyWindow(w); }
-    if (g_win_target) { if (IsWindow(g_win_target)) SetWindowPos(g_win_target, NULL, g_win_saved.left, g_win_saved.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE); g_win_target = NULL; }
+    if (g_win_target) { if (IsWindow(g_win_target) && !IsZoomed(g_win_target) && !IsIconic(g_win_target)) SetWindowPos(g_win_target, NULL, g_win_saved.left, g_win_saved.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE); g_win_target = NULL; }
     fx_free();
 }
 static void fx_paint(HDC dc) {
@@ -80,7 +80,7 @@ static LRESULT CALLBACK fx_proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         if (el >= total) { fx_end(); return 0; }
         g_cur_dx = nm_offset((int)amp, (int)el, (int)total, rnd()); g_cur_dy = nm_offset((int)amp, (int)el, (int)total, rnd());
         if (g_fx_mode == NM_SHAKE_SCREEN) { HDC dc = GetDC(h); if (dc) { fx_paint(dc); ReleaseDC(h, dc); } }
-        else if (g_win_target && IsWindow(g_win_target)) SetWindowPos(g_win_target, NULL, g_win_saved.left + g_cur_dx, g_win_saved.top + g_cur_dy, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        else if (g_win_target && IsWindow(g_win_target) && !IsZoomed(g_win_target) && !IsIconic(g_win_target)) SetWindowPos(g_win_target, NULL, g_win_saved.left + g_cur_dx, g_win_saved.top + g_cur_dy, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         return 0; }
     case WM_DESTROY: if (h == g_fx) g_fx = NULL; break;
     }
@@ -93,12 +93,10 @@ static bool fx_class(void) {
 }
 static bool fx_real(void) { return !sys_is_headless() || getenv("BRIKS_NUDGE_REAL"); }   /* teste automático conta, mas não cobre a tela de ninguém */
 
-static void shake_screen(void) {
+/* treme a imagem de uma região da tela (monitor inteiro, ou só o retângulo da janela do Briks quando ela está maximizada) */
+static void shake_region(const RECT *rg) {
     if (g_fx || !fx_class()) return;
-    POINT cp; GetCursorPos(&cp);
-    MONITORINFO mi = { sizeof mi }; HMONITOR mon = MonitorFromPoint(cp, MONITOR_DEFAULTTONEAREST);
-    if (!GetMonitorInfoW(mon, &mi)) return;
-    const int l = mi.rcMonitor.left, t = mi.rcMonitor.top; g_mw = mi.rcMonitor.right - l; g_mh = mi.rcMonitor.bottom - t;
+    const int l = rg->left, t = rg->top; g_mw = rg->right - l; g_mh = rg->bottom - t;
     if (g_mw < 64 || g_mh < 64) return;
     HDC scr = GetDC(NULL); if (!scr) return;
     g_mem = CreateCompatibleDC(scr); g_bmp = g_mem ? CreateCompatibleBitmap(scr, g_mw, g_mh) : NULL;
@@ -114,8 +112,19 @@ static void shake_screen(void) {
     SetTimer(g_fx, FX_TIMER, 15, NULL);
     g_fx_screen++;
 }
+static void shake_screen(void) {
+    POINT cp; GetCursorPos(&cp);
+    MONITORINFO mi = { sizeof mi }; HMONITOR mon = MonitorFromPoint(cp, MONITOR_DEFAULTTONEAREST);
+    if (GetMonitorInfoW(mon, &mi)) shake_region(&mi.rcMonitor);
+}
 static void shake_window(void) {
-    HWND app = (HWND)sys_hwnd(); if (g_fx || !app || !fx_class() || IsZoomed(app) || IsIconic(app)) return;
+    HWND app = (HWND)sys_hwnd(); if (g_fx || !app || !fx_class() || IsIconic(app) || !IsWindowVisible(app)) return;
+    if (IsZoomed(app)) {   /* maximizada não tem para onde andar: treme só a imagem da própria janela (nada além do retângulo dela) */
+        RECT r; GetWindowRect(app, &r);
+        HMONITOR mon = MonitorFromWindow(app, MONITOR_DEFAULTTONEAREST); MONITORINFO mi = { sizeof mi };
+        if (GetMonitorInfoW(mon, &mi) && !IntersectRect(&r, &r, &mi.rcMonitor)) return;
+        shake_region(&r); return;
+    }
     GetWindowRect(app, &g_win_saved); g_win_target = app; g_fx_mode = NM_SHAKE_WINDOW; g_fx_t0 = GetTickCount64();
     g_fx = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, L"BriksNudgeFx", L"", WS_POPUP, 0, 0, 1, 1, HWND_MESSAGE, NULL, GetModuleHandleW(NULL), NULL);   /* só o relógio: nunca aparece */
     if (!g_fx) { g_win_target = NULL; return; }
@@ -228,7 +237,7 @@ void nudge_settings(cui_ctx *ui) {
     NUDGE_CARD(ui, "CHAMAR ATENÇÃO") {
         if (cui_switch(ui, "Receber chamadas de atenção de amigos", &g_sys.nudge_on)) sys_cfg_save();
         nhint(ui, "Um amigo pode fazer a sua tela tremer por um instante. Só amigos, no máximo 1 vez a cada 15 segundos por amigo. Nada é enviado nem gravado: a imagem da tela só existe no seu computador durante o efeito.");
-        static const char *const modes[] = { "Tela inteira", "Só o Briks", "Só aviso" };
+        static const char *const modes[] = { "Tela inteira (efeito)", "Só a tela do Briks", "Só aviso" };
         int m = g_sys.nudge_mode; cui_text(ui, "Efeito", .size = 13);
         if (cui_segmented(ui, "nudge-mode", modes, 3, &m, .full_width = true, .size = CUI_SIZE_SM) && m != g_sys.nudge_mode) { g_sys.nudge_mode = m; sys_cfg_save(); }
         nhint(ui, m == 0 ? "Treme uma imagem do monitor onde está o mouse. Não pega o teclado nem o mouse." : m == 1 ? "Só a janela do Briks se mexe por um instante." : "Só um aviso do sistema, sem tremer.");

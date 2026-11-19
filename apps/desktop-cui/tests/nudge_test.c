@@ -20,7 +20,7 @@ int main(void) {
     nm_ctx c = { .recv_on = true, .mode = NM_MODE_SCREEN };
     OK(nm_decide(&c) == NM_SHAKE_SCREEN, "tela inteira com o Briks em foco");
     c.mode = NM_MODE_WINDOW; OK(nm_decide(&c) == NM_SHAKE_WINDOW, "só a janela");
-    c.maximized = true; OK(nm_decide(&c) == NM_NOTICE, "só a janela, maximizada: só aviso");
+    c.maximized = true; OK(nm_decide(&c) == NM_SHAKE_WINDOW, "só a janela, maximizada: ainda treme (imagem da janela)");
     c.maximized = false; c.mode = NM_MODE_NOTICE; OK(nm_decide(&c) == NM_NOTICE, "modo só aviso");
     c.mode = NM_MODE_SCREEN; c.background = true; OK(nm_decide(&c) == NM_FLASH, "em segundo plano: pisca, sem tremer");
     c.in_tray = true; OK(nm_decide(&c) == NM_NOTICE, "na bandeja: só aviso");
