@@ -1,0 +1,11 @@
+# Menu de contexto (botao direito) no nome do amigo: na lista da lateral e no hub de Amigos
+waitms 700
+shot m0
+rclick 370 658
+waitms 400
+shot m1
+rclick 900 500
+waitms 500
+rclick 600 286
+waitms 500
+shot m2

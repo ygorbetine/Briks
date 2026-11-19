@@ -5,6 +5,7 @@
 #include "json.h"
 #include "sysint.h"
 #include "core.h"
+#include "dmcall.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -221,6 +222,8 @@ static void empty_state(cui_ctx *ui, const char *icon, const char *title, const 
 static void friend_menu_items(cui_ctx *ui, app_state_t *s, int i, person_t *p, bool with_bell) {
     cui_menu_label(ui, p->name);
     if (cui_menu_item(ui, "Enviar mensagem", .icon = CUI_ICON_MESSAGE_SQUARE)) app_open_friend(s, i);
+    if (p->fp[0] && !s->in_room && !dmcall_calling() && cui_menu_item(ui, "Ligar", .icon = CUI_ICON_PHONE)) { app_open_friend(s, i); dmcall_start(s, i); }
+    if (cui_menu_item(ui, "Chamar atenção (tremer a tela)", .icon = CUI_ICON_ZAP)) nudge_send(s, i);
     if (with_bell) {   /* painel estreito: o sino também vai para o menu */
         const bool off = friends_bell_off(s, p->id);
         if (cui_menu_item(ui, off ? "Ligar aviso de online" : "Desligar aviso de online", .icon = off ? CUI_ICON_BELL : CUI_ICON_VOLUME_X)) friends_bell_set(s, p->id, !off);
@@ -237,6 +240,62 @@ static void friend_menu_items(cui_ctx *ui, app_state_t *s, int i, person_t *p, b
     }
     if (cui_menu_item(ui, "Bloquear", .icon = CUI_ICON_SHIELD, .danger = true)) { char id[48], nm[96]; snprintf(id, sizeof id, "%s", p->id); snprintf(nm, sizeof nm, "%s", p->name); friends_block(s, id, nm); }
 }
+/* ---- menu de contexto (botão direito) da linha de um amigo: painel de vidro ancorado no mouse; conta como modal ---- */
+static bool g_fctx_open; static char g_fctx_id[48]; static float g_fctx_x, g_fctx_y;
+void friends_row_menu(cui_ctx *ui, app_state_t *s, int i, cui_rect r) {
+    const cui_vec2 mp = cui_mouse_pos(ui);
+    if (!briks_blocked() && cui_mouse_clicked(ui, CUI_MOUSE_RIGHT) && r.w > 0 && mp.x >= r.x && mp.y >= r.y && mp.x < r.x + r.w && mp.y < r.y + r.h) {
+        g_fctx_open = true; snprintf(g_fctx_id, sizeof g_fctx_id, "%s", s->friends[i].id); g_fctx_x = mp.x; g_fctx_y = mp.y;
+    }
+}
+static bool fctx_item(cui_ctx *ui, const char *id, const char *icon, const char *label, bool danger) {
+    cui_box(ui, .id = id, .dir = CUI_ROW, .width = CUI_FILL, .pad_x = 12, .pad_y = 9, .gap = 10, .radius = 11, .align = CUI_ALIGN_CENTER,
+            .bg = briks_hover_top(ui, id) ? CUI_RGBA(0xffffff1c) : CUI_RGBA(0x00000000)) {
+        cui_icon(ui, icon, 16, danger ? B_DANGER : B_MUTED);
+        cui_text(ui, label, .size = 14, .color = danger ? B_DANGER : B_TEXT, .nowrap = true);
+    }
+    return briks_clicked_top(ui, id);
+}
+void friends_overlay(cui_ctx *ui, app_state_t *s) {
+    if (!g_fctx_open) return;
+    int fi = -1; for (int k = 0; k < s->friend_count; k++) if (!strcmp(s->friends[k].id, g_fctx_id)) { fi = k; break; }
+    if (fi < 0) { g_fctx_open = false; return; }
+    person_t *p = &s->friends[fi]; int act = 0;
+    const bool can_call = p->fp[0] && !s->in_room && !dmcall_calling();
+    const bool off = friends_bell_off(s, p->id);
+    const bool p2p = p->fp[0] && s->in_room && !friends_dm_off(s, p->fp);
+    const cui_vec2 vp = cui_viewport_size(ui), mp = cui_mouse_pos(ui);
+    const float mw = 290.0f, mh = 56.0f + 44.0f * (5.0f + (can_call ? 1.0f : 0.0f) + (p2p ? 1.0f : 0.0f));
+    const float x = fminf(fmaxf(g_fctx_x, 8), fmaxf(vp.x - mw - 8, 8)), y = fminf(fmaxf(g_fctx_y, 8), fmaxf(vp.y - 40.0f - mh - 8, 8));
+    g_modal_now = true; g_in_modal++;
+    cui_box(ui, .width = CUI_FILL, .height = CUI_FILL, .align = CUI_ALIGN_START, .justify = CUI_JUSTIFY_START, .pad_left = x, .pad_top = y) {
+        cui_box(ui, .id = "fctx", .width = CUI_PX(mw), .height = CUI_FIT, .pad = 6, .gap = 2, .radius = 16, .bg = B_GLASS_POPUP, .border = 1, .border_color = CUI_RGBA(0xc4b5fd40),
+                .elevation = CUI_ELEVATION_FLOATING, .clip = true) {
+            cui_box(ui, .width = CUI_FILL, .pad_x = 12, .pad_y = 6) { cui_text(ui, p->name, .size = 12.5f, .color = B_MUTED, .nowrap = true); }
+            if (fctx_item(ui, "f-msg", CUI_ICON_MESSAGE_SQUARE, "Enviar mensagem", false)) act = 1;
+            if (can_call && fctx_item(ui, "f-call", CUI_ICON_PHONE, "Ligar", false)) act = 2;
+            if (fctx_item(ui, "f-nudge", CUI_ICON_ZAP, "Chamar atenção (tremer a tela)", false)) act = 3;
+            if (fctx_item(ui, "f-bell", off ? CUI_ICON_BELL : CUI_ICON_VOLUME_X, off ? "Ligar aviso de online" : "Desligar aviso de online", false)) act = 4;
+            if (p2p && fctx_item(ui, "f-p2p", CUI_ICON_WIFI, "Desconectar P2P", false)) act = 5;
+            cui_box(ui, .width = CUI_FILL, .height = CUI_PX(1), .bg = CUI_RGBA(0xffffff14)) {}
+            if (fctx_item(ui, "f-unf", CUI_ICON_X, "Desfazer amizade…", true)) act = 6;
+            if (fctx_item(ui, "f-blk", CUI_ICON_SHIELD, "Bloquear", true)) act = 7;
+        }
+    }
+    g_in_modal--;
+    const cui_rect mr = cui_get_rect(ui, cui_make_id(ui, "fctx")); const bool outside = mr.w > 0 && !(mp.x >= mr.x && mp.y >= mr.y && mp.x < mr.x + mr.w && mp.y < mr.y + mr.h);
+    if (cui_key_pressed(ui, CUI_KEY_ESCAPE) || (outside && (cui_mouse_clicked(ui, CUI_MOUSE_LEFT) || cui_mouse_clicked(ui, CUI_MOUSE_RIGHT)))) g_fctx_open = false;
+    if (!act) return;
+    g_fctx_open = false;
+    if (act == 1) app_open_friend(s, fi);
+    else if (act == 2) { app_open_friend(s, fi); dmcall_start(s, fi); }
+    else if (act == 3) nudge_send(s, fi);
+    else if (act == 4) friends_bell_set(s, p->id, !off);
+    else if (act == 5) { snprintf(s->dmdisc_fp, sizeof s->dmdisc_fp, "%s", p->fp); snprintf(s->dmdisc_name, sizeof s->dmdisc_name, "%s", p->name); s->dmdisc_open = true; }
+    else if (act == 6) { snprintf(s->unfriend_id, sizeof s->unfriend_id, "%s", p->id); snprintf(s->unfriend_name, sizeof s->unfriend_name, "%s", p->name); s->unfriend_open = true; }
+    else if (act == 7) { char id[48], nm[96]; snprintf(id, sizeof id, "%s", p->id); snprintf(nm, sizeof nm, "%s", p->name); friends_block(s, id, nm); }
+}
+
 static void friend_row(cui_ctx *ui, app_state_t *s, int i) {
     person_t *p = &s->friends[i];
     cui_push_id_int(ui, 9000 + i);
@@ -255,6 +314,7 @@ static void friend_row(cui_ctx *ui, app_state_t *s, int i) {
             cui_menu(ui, "Mais", .icon = CUI_ICON_ELLIPSIS, .icon_only = true, .placement = CUI_PLACE_BOTTOM_END) { friend_menu_items(ui, s, i, p, false); }
         }
     }
+    { const cui_rect fr = cui_get_rect(ui, cui_make_id(ui, "fr")); friends_row_menu(ui, s, i, fr); }   /* botão direito no nome: menu de contexto */
     cui_pop_id(ui);
 }
 

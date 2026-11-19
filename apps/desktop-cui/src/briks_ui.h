@@ -266,7 +266,9 @@ void groups_collapse_set(const char *gid, bool on);   /* 1.4.1: grupo recolhido 
 void groups_header(cui_ctx *ui, app_state_t *s);
 void groups_dialogs(cui_ctx *ui, app_state_t *s);
 void groups_create_json(const app_state_t *s, char *out, size_t cap);
-void groups_overlay(cui_ctx *ui, app_state_t *s);                              /* menu de contexto do grupo (camada de cima, junto do menu da mensagem) */
+void groups_overlay(cui_ctx *ui, app_state_t *s);                              /* menu de contexto do grupo (camada de cima, junto do menu da mensagem) */
+void friends_overlay(cui_ctx *ui, app_state_t *s);                                 /* menu de contexto (botão direito) do amigo, camada de cima */
+void friends_row_menu(cui_ctx *ui, app_state_t *s, int i, cui_rect r);            /* botão direito na linha do amigo */
 void friends_code_card(cui_ctx *ui, app_state_t *s);   /* cartão "Por código" (gerar/copiar/aceitar), usado no diálogo e no hub */
 void friends_p2p_event(app_state_t *s, const struct jval *j);   /* friend.result do core */
 bool groups_want_roster(const app_state_t *s);                                  /* há grupo com sala de voz: vale abrir a sessão do core cedo (presença por sala) */

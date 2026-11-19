@@ -331,6 +331,7 @@ static void navigation(cui_ctx *ui, app_state_t *s) {
                 cui_push_id_int(ui, i);
                 { char dc[160]; chat_dm_channel(s, s->friends[i].id, dc, sizeof dc); g_row_unread = s->active_friend == i ? 0 : notify_unread_for(dc); g_row_pending = s->friends[i].fp[0] ? chat_pending_for_fp(s->friends[i].fp) : 0; g_row_invites = ginvite_pending_from(s->friends[i].id); }
                 if (person_row_ex(ui, &s->friends[i], s->active_friend == i, friend_photo(s->friends[i].id))) app_open_friend(s, i);
+                { cui_push_id(ui, s->friends[i].name); const cui_rect rr = cui_get_rect(ui, cui_make_id(ui, "b")); cui_pop_id(ui); friends_row_menu(ui, s, i, rr); }   /* botão direito no nome: menu de contexto */
                 cui_pop_id(ui);
             }
         }
@@ -854,6 +855,7 @@ void ui_social(cui_ctx *ui, app_state_t *s) {
     bubbles_draw(ui);
     call_banner(ui, s);   /* "pediu para você transmitir" também com a chamada minimizada */
     groups_overlay(ui, s);
+    friends_overlay(ui, s);
     msgui_overlay(ui, s);
     attach_overlay(ui, s);
     attach_palette_keys(ui);
