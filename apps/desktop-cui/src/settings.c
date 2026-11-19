@@ -59,6 +59,7 @@ bool settings_codec_hw(void) { return g_set.codec_hw; }
 int settings_codec_h(void) { return g_set.codec_h; }
 void settings_codec_result_set(const char *rec, bool hw, int h, const char *msg) { snprintf(g_set.codec_rec, sizeof g_set.codec_rec, "%s", rec ? rec : ""); g_set.codec_hw = hw; g_set.codec_h = h; snprintf(g_set.codec_msg, sizeof g_set.codec_msg, "%s", msg ? msg : ""); }
 int settings_call_mode(void) { return g_set.call_mode; }
+bool settings_call_mode_chosen(void) { return g_set.call_mode_set; }   /* o usuário escolheu o modo de propósito (não é o padrão) */
 void settings_call_mode_set(int mode) { if (mode < 0 || mode > 2) return; g_set.call_mode = mode; g_set.call_mode_set = true; }
 int settings_idle_min(void) { return g_set.idle_min < 0 ? 0 : g_set.idle_min; }
 int settings_net_pref(void) { return g_set.net_pref; }

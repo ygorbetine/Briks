@@ -123,12 +123,18 @@ fn net_env(k: &str) -> Option<String> {
 }
 
 /// Tenta entrar na sala pelo SFU: token do Supabase (sessão do usuário), depois sinalização LiveKit. Erro = texto para o diagnóstico.
-pub(crate) async fn try_sfu(sc: &crate::sfu_cfg::SfuConfig, accounts: &crate::accounts::service::Runtime, ns: &str, room: &str, audio: Option<(Arc<Audio>, mpsc::Receiver<crate::audio::AudioEvent>)>, data: Option<crate::sfudata::DataCfg>) -> Result<crate::sfu::SfuHandle, String> {
+pub(crate) async fn try_sfu(sc: &crate::sfu_cfg::SfuConfig, accounts: &crate::accounts::service::Runtime, ns: &str, room: &str, audio: Option<(Arc<Audio>, mpsc::Receiver<crate::audio::AudioEvent>)>, data: Option<crate::sfudata::DataCfg>) -> Result<crate::sfu::SfuHandle, String> { try_sfu_with(sc, accounts, ns, room, audio, data, None).await }
+pub(crate) async fn try_sfu_with(sc: &crate::sfu_cfg::SfuConfig, accounts: &crate::accounts::service::Runtime, ns: &str, room: &str, audio: Option<(Arc<Audio>, mpsc::Receiver<crate::audio::AudioEvent>)>, data: Option<crate::sfudata::DataCfg>, pre: Option<Result<crate::sfu::RoomProbe, crate::sfu::TokenFail>>) -> Result<crate::sfu::SfuHandle, String> {
     let acc = accounts.acc.clone().ok_or("entre na sua conta Briks para usar o servidor de chamadas")?;
     let access = acc.access_token().await.map_err(|e| format!("sessão: {e}"))?;
     let lk_room = format!("{ns}:{}", &secure_room_id(ns, room)[..32]);
     let (url, room2) = (sc.token_url.clone(), lk_room.clone());
-    let (token, told_url) = tokio::task::spawn_blocking(move || crate::sfu::fetch_token_ex(&url, &access, &room2)).await.map_err(|e| e.to_string())?.map_err(|e| e.msg)?;
+    // token da espiada da sala (ipc room.join), se houver e ainda válido: não gasta outro pedido do limite do serviço
+    let (token, told_url) = match pre {
+        Some(Ok((tk, u, _))) => (tk, u),
+        Some(Err(e)) => return Err(e.msg),   // a espiada já levou 429/recusa: tentar de novo agora só gastaria mais cota
+        None => tokio::task::spawn_blocking(move || crate::sfu::fetch_token_ex(&url, &access, &room2)).await.map_err(|e| e.to_string())?.map_err(|e| e.msg)?,
+    };
     // O serviço de tokens diz para qual servidor o token vale. Se for outro que não o configurado aqui, vale o do serviço (é ele que
     // tem a chave); se a URL que ele mandou não for aceitável (esquema), erro claro em vez de uma recusa sem explicação.
     let norm = |u: &str| u.trim().trim_end_matches('/').to_ascii_lowercase();
@@ -336,16 +342,21 @@ async fn handle(s: TcpStream, token: &str, cfg: &Config, accounts: Arc<crate::ac
                         if let Err(e) = &sfu_conf { sfu_err = e.clone(); }
                         // Entrar no mesmo modo de quem já está na chamada: sala só no servidor de chamadas -> SFU; sala só em P2P -> P2P
                         // (sem isto cada um entrava no seu modo e a sala se dividia). Desligue com BRIKS_AUTO_MODE=0.
-                        if sfu_ns && sfu_ready && std::env::var("BRIKS_AUTO_MODE").map(|x| x != "0").unwrap_or(!cfg!(test)) {
+                        let mut probe: Option<Result<crate::sfu::RoomProbe, crate::sfu::TokenFail>> = None;
+                        let explicit_mode = v["explicit"].as_bool().unwrap_or(false) && !v["keep"].as_bool().unwrap_or(false);
+                        if sfu_ns && sfu_ready && !v["keep"].as_bool().unwrap_or(false) && v["detect"].as_bool().unwrap_or_else(|| std::env::var("BRIKS_AUTO_MODE").map(|x| x != "0").unwrap_or(!cfg!(test))) {
                             if let (Ok(Some(sc)), Some(acc)) = (&sfu_conf, accounts.acc.clone()) {
                                 let (ns2, room2) = (v["namespace"].as_str().unwrap_or("room").to_string(), v["room"].as_str().unwrap_or("").to_string());
                                 if !room2.is_empty() && room2.len() <= 200 {
                                     let lk_room = format!("{ns2}:{}", &secure_room_id(&ns2, &room2)[..32]);
                                     let token_url = sc.token_url.clone();
-                                    let sfu_empty = match acc.access_token().await {
-                                        Ok(access) => tokio::task::spawn_blocking(move || crate::sfu::fetch_room_empty(&token_url, &access, &lk_room)).await.ok().and_then(|r| r.ok()),
+                                    let probe_res = match acc.access_token().await {
+                                        Ok(access) => tokio::task::spawn_blocking(move || crate::sfu::fetch_room_probe(&token_url, &access, &lk_room)).await.ok(),
                                         Err(_) => None,
                                     };
+                                    let sfu_empty = probe_res.as_ref().and_then(|r| r.as_ref().ok()).map(|p| p.2);
+                                    // o token da espiada serve para entrar (um pedido só); só se guarda a recusa por excesso de pedidos (429)
+                                    probe = match probe_res { Some(Ok(p)) => Some(Ok(p)), Some(Err(e)) if e.retry_after.is_some() => Some(Err(e)), _ => None };
                                     let p2p_busy = match (&cfg.realtime_url, &cfg.realtime_key) {
                                         (Some(u), Some(k)) if sfu_empty == Some(true) || net_mode == crate::sfu_cfg::NetMode::P2p => realtime::peek_occupied(RealtimeCfg::new(u, k), topic_name(&ns2, &secure_room_id(&ns2, &room2))).await,
                                         _ => false,
@@ -355,7 +366,13 @@ async fn handle(s: TcpStream, token: &str, cfg: &Config, accounts: Arc<crate::ac
                                         let cur_p2p = net_mode == crate::sfu_cfg::NetMode::P2p;
                                         if (w == crate::sfu_cfg::NetMode::Sfu && cur_p2p) || (w == crate::sfu_cfg::NetMode::P2p && !cur_p2p) {
                                             crate::netlog::write(&format!("modo automatico: sala ja esta em {}, entrando nele", if w == crate::sfu_cfg::NetMode::Sfu { "SFU" } else { "P2P" }));
-                                            out(&mut wr, json!({ "ev": "net.auto", "to": if w == crate::sfu_cfg::NetMode::Sfu { "sfu" } else { "p2p" } })).await?;
+                                            let to = if w == crate::sfu_cfg::NetMode::Sfu { "sfu" } else { "p2p" };
+                                            if explicit_mode {
+                                                // o usuário escolheu este modo de propósito: não troca em silêncio; a tela pergunta e o room.join volta com "keep" ou com o modo da sala
+                                                out(&mut wr, json!({ "ev": "net.ask", "room_mode": to, "mine": net_mode.name() })).await?;
+                                                continue;
+                                            }
+                                            out(&mut wr, json!({ "ev": "net.auto", "to": to, "from": net_mode.name() })).await?;
                                             net_mode = w;
                                         }
                                     }
@@ -373,7 +390,7 @@ async fn handle(s: TcpStream, token: &str, cfg: &Config, accounts: Arc<crate::ac
                                     // Padrão: chat/status/presença/expulsão pelas data channels do próprio LiveKit (sem teto de peers). BRIKS_SFU_MESH=1: híbrido com a malha P2P (até 5).
                                     let with_mesh = std::env::var("BRIKS_SFU_MESH").map(|v| v == "1").unwrap_or(false);
                                     let dcfg = if with_mesh { None } else { Some(crate::sfudata::DataCfg { identity: id.clone(), name: name.clone(), room_hash: secure_room_id(&ns, &room), owner_fp: v["owner_fp"].as_str().map(String::from), joined_at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0) }) };
-                                    match try_sfu(sc, &accounts, &ns, &room, au.clone().zip(au_rx), dcfg).await {
+                                    match try_sfu_with(sc, &accounts, &ns, &room, au.clone().zip(au_rx), dcfg, probe.take()).await {
                                         Ok(h) if !with_mesh => {
                                             // SFU puro: sem malha nem Realtime. O peer_id local é a identidade no SFU.
                                             let (_, reason) = crate::sfu_cfg::decide(net_mode, true, false, false);

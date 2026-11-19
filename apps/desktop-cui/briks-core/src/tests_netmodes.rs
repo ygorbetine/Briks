@@ -78,3 +78,63 @@ async fn call_modes_p2p_auto_sfu_with_and_without_the_server() {
     tokio::time::sleep(std::time::Duration::from_millis(800)).await;
     assert!(a.count(|v| v["ev"] == "signaling.status" && v["state"] == "erro") > e0, "Automático sem SFU configurado segue o caminho P2P");
 }
+
+/// Serviço de tokens que diz "sala com gente" (owner:false) e devolve um token qualquer; conta os pedidos.
+fn busy_room_token_service(hits: Arc<AtomicUsize>) -> u16 {
+    use std::io::{Read, Write};
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = l.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for s in l.incoming() {
+            let Ok(mut s) = s else { continue };
+            let mut buf = vec![0u8; 8192];
+            let _ = s.read(&mut buf);
+            hits.fetch_add(1, Ordering::SeqCst);
+            let body = json!({ "token": "aaa.bbb.ccc", "owner": false }).to_string();
+            let _ = write!(s, "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}", body.len());
+            let _ = s.shutdown(std::net::Shutdown::Write);
+            let _ = s.set_read_timeout(Some(std::time::Duration::from_millis(300)));
+            while s.read(&mut buf).map(|n| n > 0).unwrap_or(false) {}
+        }
+    });
+    port
+}
+
+/// Copiar o modo da sala: a sala está no servidor (token com owner:false) e ninguém está em P2P. Quem nunca escolheu o modo é levado ao
+/// Servidor com aviso (net.auto); quem escolheu Direto de propósito recebe uma pergunta (net.ask) e não entra em lugar nenhum; "keep" entra no
+/// modo escolhido sem olhar a sala. O token da espiada é o mesmo da entrada (um pedido só ao serviço, que limita 30 por 10 min).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn join_copies_room_mode_and_respects_explicit_choice() {
+    std::env::set_var("BRIKS_CORE_FAKE_AUDIO", "1");
+    std::env::remove_var("BRIKS_NET_MODE");
+    std::env::remove_var("BRIKS_NET_FALLBACK");
+    let f = fake::start(0).await.unwrap();
+    f.state.lock().unwrap().autoconfirm = true;
+    let hits = Arc::new(AtomicUsize::new(0));
+    let tport = busy_room_token_service(hits.clone());
+    let (mut a, _s, _dir) = app("copiamodo", &f.url(), Some("copiamodo@exemplo.com"), "Copia", tport).await;
+    let join = |room: &str, extra: serde_json::Value| { let mut v = json!({ "cmd": "room.join", "namespace": "room", "room": room, "net": "p2p", "detect": true }); for (k, x) in extra.as_object().unwrap() { v[k] = x.clone(); } v };
+
+    // escolha explícita de Direto + sala no servidor: pergunta, não entra e não troca em silêncio
+    a.send(join("sala-ocupada", json!({ "explicit": true }))).await;
+    let ask = a.wait(20, "net.ask", |v| v["ev"] == "net.ask").await;
+    assert_eq!((ask["room_mode"].as_str(), ask["mine"].as_str()), (Some("sfu"), Some("p2p")));
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    assert_eq!(a.count(|v| v["ev"] == "net.auto"), 0, "escolha explícita não troca em silêncio");
+    assert_eq!(a.count(|v| v["ev"] == "net.mode"), 0, "a pergunta não abre chamada nenhuma");
+    assert_eq!(hits.load(Ordering::SeqCst), 1, "só a espiada pediu token");
+
+    // "keep" = entrar mesmo assim no modo escolhido: nem espia a sala (P2P não pede token)
+    a.send(join("sala-ocupada", json!({ "explicit": true, "keep": true }))).await;
+    a.wait(10, "P2P mantido chegou à sinalização", |v| v["ev"] == "signaling.status" && v["state"] == "erro").await;
+    assert_eq!(hits.load(Ordering::SeqCst), 1, "keep não espia a sala");
+    assert_eq!(a.count(|v| v["ev"] == "net.ask"), 1);
+
+    // sem escolha explícita: troca para o modo da sala e avisa; a entrada reaproveita o token da espiada (1 pedido, não 2)
+    let before = hits.load(Ordering::SeqCst);
+    a.send(join("sala-ocupada2", json!({ "explicit": false }))).await;
+    let au = a.wait(20, "net.auto", |v| v["ev"] == "net.auto").await;
+    assert_eq!((au["to"].as_str(), au["from"].as_str()), (Some("sfu"), Some("p2p")));
+    a.wait(20, "tentou entrar pelo servidor", |v| v["ev"] == "error" && v["where"] == "room.join").await;
+    assert_eq!(hits.load(Ordering::SeqCst) - before, 1, "espiar + entrar gastam um token só");
+}
