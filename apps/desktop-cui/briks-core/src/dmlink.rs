@@ -42,7 +42,7 @@ pub fn is_poke(meta: &Value) -> bool { meta["poke"].as_bool() == Some(true) }
 /// Sinais assinados na caixa de chegada (1.6): "call" (estou ligando; dados {room, name}), "ginv" (convidei você para um grupo; {gid, name}).
 /// Vão como metadado de presença, junto com a chave pública e a assinatura de quem enviou: o receptor confere que a impressão digital é da chave,
 /// que a assinatura vale e que o sinal foi feito PARA a conta dele e há pouco tempo. Quem não é amigo ainda é descartado pela interface.
-pub const SIG_KINDS: [&str; 2] = ["call", "ginv"];
+pub const SIG_KINDS: [&str; 3] = ["call", "ginv", "nudge"];   // nudge (chamar atenção; dados {name}): só vale de amigo, a interface confere
 pub const SIG_MAX_AGE_MS: u64 = 15 * 60 * 1000;
 pub fn signal_canonical(kind: &str, data: &str, ts: u64, to_user: &str) -> String { format!("briks-sig1|{kind}|{data}|{ts}|{to_user}") }
 pub fn signal_meta(id: &Identity, kind: &str, data: &Value, ts: u64, to_user: &str) -> Value {
@@ -192,6 +192,28 @@ mod t {
         let mut bad = meta.clone(); bad["jwk"] = other["jwk"].clone();
         assert!(read_signal(&bad, "outro-fp", "user-b", now_ms()).is_none(), "chave de outro");
         assert!(read_signal(&signal_meta(&id, "xyz", &data, now_ms(), "user-b"), "o", "user-b", now_ms()).is_none(), "tipo desconhecido");
+    }
+
+    #[test]
+    fn a_nudge_signal_is_valid_only_signed_for_me_and_fresh() {
+        let id = Identity::generate();
+        let data = json!({ "name": "Ana" });
+        let meta = signal_meta(&id, "nudge", &data, now_ms(), "user-b");
+        let (fp, kind, d) = read_signal(&meta, "outro-fp", "user-b", now_ms()).expect("nudge válido");
+        assert_eq!((fp.as_str(), kind.as_str(), &d), (id.fingerprint().as_str(), "nudge", &data));
+        assert!(read_signal(&meta, "outro-fp", "user-c", now_ms()).is_none(), "feito para outra conta");
+        assert!(read_signal(&meta, &id.fingerprint(), "user-b", now_ms()).is_none(), "o próprio sinal");
+        assert!(read_signal(&meta, "outro-fp", "user-b", now_ms() + SIG_MAX_AGE_MS + 5000).is_none(), "velho demais");
+        assert!(read_signal(&meta, "outro-fp", "user-b", now_ms().saturating_sub(SIG_MAX_AGE_MS + 5000)).is_none(), "do futuro demais");
+        let mut bad = meta.clone(); bad["sig"]["d"] = json!("{\"name\":\"Outro\"}");
+        assert!(read_signal(&bad, "outro-fp", "user-b", now_ms()).is_none(), "dados adulterados");
+        let mut bad = meta.clone(); bad["sig"]["k"] = json!("call");
+        assert!(read_signal(&bad, "outro-fp", "user-b", now_ms()).is_none(), "tipo trocado invalida a assinatura");
+        let big = signal_meta(&id, "nudge", &json!({ "name": "x".repeat(2000) }), now_ms(), "user-b");
+        assert!(read_signal(&big, "outro-fp", "user-b", now_ms()).is_none(), "dados grandes demais");
+        assert!(read_signal(&signal_meta(&id, "shake", &data, now_ms(), "user-b"), "o", "user-b", now_ms()).is_none(), "tipo desconhecido");
+        let not_obj = signal_meta(&id, "nudge", &json!("texto"), now_ms(), "user-b");
+        assert!(read_signal(&not_obj, "outro-fp", "user-b", now_ms()).is_none(), "dados que não são objeto");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
