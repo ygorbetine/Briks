@@ -46,3 +46,6 @@ These notices and the complete third-party license texts are distributed with pa
 
 ## libvpx (VP8/VP9) — BSD-3-Clause
 Briks 1.4.4+ liga estaticamente a libvpx 1.14.1 (Copyright (c) 2010, The WebM Project authors). Licença BSD de 3 cláusulas e concessão de patentes: https://github.com/webmproject/libvpx/blob/v1.14.1/LICENSE
+
+## RNNoise via nnnoiseless 0.5.2 — BSD-3-Clause
+Briks liga o crate Rust `nnnoiseless` (port do RNNoise) para a supressão de ruído "Alta qualidade". Copyright (c) 2020 Joe Neeman; (c) 2017 Mozilla; (c) 2007-2017 Jean-Marc Valin; (c) 2005-2017 Xiph.Org Foundation; (c) 2003-2004 Mark Borgerding. Licença BSD de 3 cláusulas: https://github.com/jneem/nnnoiseless/blob/master/COPYING
