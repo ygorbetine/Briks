@@ -1,6 +1,7 @@
 /* Testes da lógica pura da chamada (src/callhist.c): histórico, duração, grade de participantes e indicador de rede. Sem janela. */
 #include "../src/callhist.h"
 #include "../src/call_idle.h"
+#include "../src/lognet.h"
 #include <stdio.h>
 #include <string.h>
 static int fails;
@@ -27,8 +28,21 @@ static void idle_tests(void) {
     OK(idle_phase_lim(0, 90000LL, &rem) == IDLE_ACTIVE && idle_phase_lim(65000LL, 90000LL, &rem) == IDLE_WARNING, "inatividade: prazo curto avisa em 1/3 (nunca desde o início)");
 }
 
+static void lognet_tests(void) {
+    char o[512];
+    lognet_redact("1700000000 sfu token=abcDEF123 conectou", o, sizeof o); OK(strstr(o, "abc") == NULL && strstr(o, "token=[oculto]") && strstr(o, "conectou"), "log: token=valor coberto");
+    lognet_redact("auth Bearer eyJhbGciOiJIUzI1NiJ9.abc.def fim", o, sizeof o); OK(strstr(o, "eyJ") == NULL && strstr(o, "fim"), "log: JWT coberto");
+    lognet_redact("senha: hunter2 ok", o, sizeof o); OK(strstr(o, "hunter2") == NULL, "log: senha com dois pontos coberta");
+    lognet_redact("peer 192.168.0.12 e 2001:db8::1 saiu", o, sizeof o); OK(strstr(o, "192.168") == NULL && strstr(o, "2001:") == NULL && strstr(o, "[ip]"), "log: IPs cobertos");
+    lognet_redact("chave a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6 fim", o, sizeof o); OK(strstr(o, "a1b2c3d4") == NULL, "log: segredo hex longo coberto");
+    lognet_redact("fulano@exemplo.com entrou", o, sizeof o); OK(strstr(o, "fulano") == NULL, "log: e-mail coberto");
+    lognet_redact("1700000000 sfu reconectando tentativa 3 ice=connected", o, sizeof o); OK(!strcmp(o, "1700000000 sfu reconectando tentativa 3 ice=connected"), "log: linha comum fica intacta");
+    OK(!strcmp(lognet_tail("a\nb\nc\nd\n", 2), "c\nd\n") && !strcmp(lognet_tail("a\nb", 5), "a\nb"), "log: últimas linhas");
+}
+
 int main(void) {
     idle_tests();
+    lognet_tests();
     static callhist_t h, g; static char buf[CALLHIST_MAX * 760 + 256]; char b[64];
 
     /* histórico: ordem, opção de guardar, apagar */

@@ -11,6 +11,7 @@
 #include "storage.h"
 #include "callhist.h"
 #include "json.h"
+#include "lognet.h"
 void update_settings_cards(cui_ctx *ui, app_state_t *s); int update_probe(const char *n);   /* ui_update.c */
 int overlay_tile_count(void); const char *overlay_tile_name(int j); bool overlay_tile_enabled(int j); void overlay_tile_enable(int j, bool on);   /* overlay_host.c */
 void overlay_edit_toggle(void); bool overlay_edit_active(void); void overlay_edit_set(bool on); void settings_ovl_reset(void);   /* overlay_host.c */
@@ -343,6 +344,24 @@ void settings_export_json(FILE *f) {
 }
 
 /* sondas dos roteiros de teste (script.c: expect <nome> <valor>); -9999 = nome desconhecido */
+/* QoL-3: copia as últimas ~300 linhas do rede.log (sem segredos, ver lognet.h) para a área de transferência; msg recebe o aviso */
+static char g_log_msg[200]; static int g_log_sent;
+static void log_send(void) {
+    char dir[MAX_PATH], h[MAX_PATH], r[MAX_PATH]; const char *e = getenv("BRIKS_CORE_DATA");
+    if (e && e[0]) snprintf(dir, sizeof dir, "%s", e); else storage_dirs(dir, h, r, sizeof dir);
+    char path[MAX_PATH + 16]; snprintf(path, sizeof path, "%s\\rede.log", dir);
+    FILE *f = fopen(path, "rb"); if (!f) { snprintf(g_log_msg, sizeof g_log_msg, "Ainda não há registro de rede neste computador (rede.log). Entre numa chamada e tente de novo."); g_log_sent = 0; return; }
+    fseek(f, 0, SEEK_END); long n = ftell(f); long from = n > 120000 ? n - 120000 : 0; fseek(f, from, SEEK_SET);
+    char *raw = (char *)malloc((size_t)(n - from) + 1); size_t got = raw ? fread(raw, 1, (size_t)(n - from), f) : 0; fclose(f);
+    if (!raw) return; raw[got] = 0;
+    const char *tail = lognet_tail(raw, 300); size_t cap = strlen(tail) * 2 + 256;
+    char *out = (char *)malloc(cap + 96);
+    if (!out) { free(raw); return; }
+    int o = snprintf(out, 96, "Briks %s - rede.log (ultimas linhas, sem segredos)\n", BRIKS_APP_VERSION);
+    lognet_redact(tail, out + o, cap);
+    briks_clip_set(out); free(out); free(raw);
+    snprintf(g_log_msg, sizeof g_log_msg, "Log copiado (sem senhas, chaves ou endereços). Cole na conversa com o suporte com Ctrl+V."); g_log_sent = 1;
+}
 int settings_probe(const char *n, app_state_t *s) {
     unsigned m; int v;
     { int dp = data_probe(n); if (dp != -9999) return dp; }
@@ -350,6 +369,7 @@ int settings_probe(const char *n, app_state_t *s) {
     { int up = update_probe(n); if (up != -9999) return up; }
     { int op = overlay_probe(n); if (op != -9999) return op; }
     { int cp = cam_probe(n); if (cp != -9999) return cp; }
+    if (!strcmp(n, "log_sent")) return g_log_sent;
     if (!strcmp(n, "cfg_ov_on")) return g_set.ov_on;
     if (!strcmp(n, "cfg_ov_tiles")) { int c = 0; for (const char *p = g_set.ov_tiles; *p; p++) if (*p == ';') c++; return g_set.ov_tiles[0] ? c + 1 : 0; }
     if (!strcmp(n, "cfg_ov_toff")) { int c = 0; for (const char *p = g_set.ov_toff; *p; p++) if (*p == ';') c++; return g_set.ov_toff[0] ? c + 1 : 0; }
@@ -620,7 +640,10 @@ void settings_dialog(cui_ctx *ui, app_state_t *s) {
                         cui_textf(ui, "Pessoas na sala: %d (autenticadas: %d)", s->rtc_peer_count, s->rtc_authed_count);
                         cui_textf(ui, "Modo da chamada: %s", s->net_note[0] ? s->net_note : "ainda sem chamada nesta sessão");
                         if (s->rtc_msg[0]) sub(ui, s->rtc_msg);
-                        (void)b; sub(ui, s->ice_note[0] ? s->ice_note : "Servidores: STUN público (TURN só se configurado)."); 
+                        (void)b; sub(ui, s->ice_note[0] ? s->ice_note : "Servidores: STUN público (TURN só se configurado).");
+                        sub(ui, "Algo não funcionou na chamada? Copie o registro de rede (últimas ~300 linhas) e cole na conversa com o suporte. Senhas, chaves, tokens e endereços são removidos antes.");
+                        if (cui_button(ui, "Enviar log", .variant = CUI_BUTTON_SECONDARY, .size = CUI_SIZE_SM)) log_send();
+                        if (g_log_msg[0]) sub(ui, g_log_msg); 
                     }
                     break; }
                 case 2: /* Temas */

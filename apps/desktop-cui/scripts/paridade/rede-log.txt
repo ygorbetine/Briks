@@ -1,0 +1,10 @@
+# QoL-3: Configurações > Rede > Enviar log: sem rede.log a mensagem explica; com o arquivo copia (sem segredos) e avisa
+waitms 900
+at 900 500
+wheel -40
+waitms 500
+shot rl0
+mclick 514 757
+waitms 300
+expect log_sent 1
+shot rl1
