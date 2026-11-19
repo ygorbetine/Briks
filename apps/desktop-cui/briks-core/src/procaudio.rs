@@ -75,6 +75,25 @@ pub fn windows_build() -> u32 {
     if unsafe { RtlGetVersion(&mut v) } == 0 { v.build } else { 0 }
 }
 
+/// Nome do dispositivo padrão de *comunicação* do Windows (o que Discord/Teams/Zoom usam), para entrada ou saída.
+/// None se não houver ou se a consulta falhar (aí vale o padrão comum do cpal).
+pub fn comm_default_name(input: bool) -> Option<String> {
+    use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
+    use windows::Win32::System::Com::{CoTaskMemFree, STGM_READ};
+    use windows::Win32::System::Com::StructuredStorage::PropVariantToStringAlloc;
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        let en = CoCreateInstance::<_, IMMDeviceEnumerator>(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
+        let dev = en.GetDefaultAudioEndpoint(if input { eCapture } else { eRender }, eCommunications).ok()?;
+        let store = dev.OpenPropertyStore(STGM_READ).ok()?;
+        let pv = store.GetValue(&PKEY_Device_FriendlyName).ok()?;
+        let w = PropVariantToStringAlloc(&pv).ok()?;
+        let name = w.to_string().ok();
+        CoTaskMemFree(Some(w.0 as *const _));
+        name.filter(|n| !n.trim().is_empty())
+    }
+}
+
 /// Apps com sessão de áudio na saída padrão: [{pid, exe, name, playing}] ("playing" = som saindo agora).
 pub fn list_apps() -> Vec<Value> {
     let mut out: Vec<Value> = vec![];

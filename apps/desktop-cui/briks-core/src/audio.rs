@@ -141,6 +141,17 @@ impl NoiseFilter {
 }
 
 /// Dispositivo cujo nome combina com o pedido (o Windows corta nomes em 31 caracteres: aceita prefixo; depois, trecho).
+/// Padrão do sistema para o Briks: o dispositivo de *comunicação* do Windows (como Discord/Teams), não o "padrão" comum.
+/// Se ele não existir na lista do cpal, cai no padrão comum.
+fn default_device(host: &cpal::Host, input: bool) -> Option<cpal::Device> {
+    use cpal::traits::{DeviceTrait, HostTrait};
+    if let Some(want) = crate::procaudio::comm_default_name(input) {
+        let list: Vec<cpal::Device> = if input { host.input_devices().map(|d| d.collect()).unwrap_or_default() } else { host.output_devices().map(|d| d.collect()).unwrap_or_default() };
+        if let Some(d) = list.into_iter().find(|d| d.name().map(|n| n == want).unwrap_or(false)) { return Some(d); }
+    }
+    if input { host.default_input_device() } else { host.default_output_device() }
+}
+
 pub fn match_device(names: &[String], want: &str) -> Option<usize> {
     let w = want.trim().to_lowercase();
     if w.is_empty() { return None; }
@@ -454,7 +465,7 @@ impl Audio {
         if !op.in_default && !op.out_default { return false; }
         let host = cpal::default_host();
         let name = |d: Option<cpal::Device>| d.and_then(|d| d.name().ok());
-        (op.in_default && name(host.default_input_device()) != op.in_name) || (op.out_default && name(host.default_output_device()) != op.out_name)
+        (op.in_default && name(default_device(&host, true)) != op.in_name) || (op.out_default && name(default_device(&host, false)) != op.out_name)
     }
 
     /// Escolhe o dispositivo pelo nome salvo; se sumiu, usa o padrão e avisa. O bool diz se é o padrão do sistema.
@@ -465,7 +476,7 @@ impl Audio {
             let list: Vec<cpal::Device> = if input { host.input_devices().map(|d| d.collect()).unwrap_or_default() } else { host.output_devices().map(|d| d.collect()).unwrap_or_default() };
             let names: Vec<String> = list.iter().map(|d| d.name().unwrap_or_default()).collect();
             if let Some(i) = match_device(&names, want) { return list.into_iter().nth(i).map(|d| (d, false)); }
-            let def = if input { host.default_input_device() } else { host.default_output_device() };
+            let def = default_device(host, input);
             let dn = def.as_ref().and_then(|d| d.name().ok());
             *self.pending_notice.lock().unwrap() = Some(match dn {
                 Some(n) => format!("{what} \"{want}\" não está mais disponível; usando o padrão do sistema ({n})"),
@@ -473,7 +484,7 @@ impl Audio {
             });
             return def.map(|d| (d, true));
         }
-        (if input { host.default_input_device() } else { host.default_output_device() }).map(|d| (d, true))
+        default_device(host, input).map(|d| (d, true))
     }
 
     /// Microfone falso (BRIKS_FAKE_MIC): nunca toca no hardware. `unplug-after-N`: "desplugado" depois de N ms na primeira abertura.
@@ -621,7 +632,7 @@ impl MicTest {
                 let host = cpal::default_host();
                 let list: Vec<cpal::Device> = host.input_devices().map(|d| d.collect()).unwrap_or_default();
                 let names: Vec<String> = list.iter().map(|d| d.name().unwrap_or_default()).collect();
-                let dev = match_device(&names, &cfg.mic).and_then(|i| list.into_iter().nth(i)).or_else(|| host.default_input_device());
+                let dev = match_device(&names, &cfg.mic).and_then(|i| list.into_iter().nth(i)).or_else(|| default_device(&host, true));
                 let Some(dev) = dev else { send(0.0, Some(MicProblem::NoDevice)); return };
                 let r = dev.default_input_config().map_err(|e| e.to_string()).and_then(|c| {
                     let (ch, rate) = (c.channels() as usize, c.sample_rate().0);
@@ -664,6 +675,21 @@ impl Drop for MicTest { fn drop(&mut self) { self.stop(); } }
 #[cfg(test)]
 mod unit {
     use super::*;
+
+    /// Só consulta (não abre áudio): o padrão de comunicação, se existir, tem de estar entre os dispositivos do cpal.
+    #[test]
+    fn padrao_de_comunicacao_resolve() {
+        use cpal::traits::{DeviceTrait, HostTrait};
+        let host = cpal::default_host();
+        for input in [true, false] {
+            let Some(want) = crate::procaudio::comm_default_name(input) else { continue };
+            let list: Vec<cpal::Device> = if input { host.input_devices().unwrap().collect() } else { host.output_devices().unwrap().collect() };
+            assert!(list.iter().any(|d| d.name().map(|n| n == want).unwrap_or(false)), "{want} não está na lista do cpal");
+            let d = default_device(&host, input).expect("dispositivo");
+            assert_eq!(d.name().unwrap(), want);
+            eprintln!("comunicação ({}): {want}", if input { "entrada" } else { "saída" });
+        }
+    }
 
     /// O áudio de uma transmissão só começa a tocar com 100 ms guardados (acompanha a reprodução suavizada da imagem); a voz, com 60 ms.
     #[test]
