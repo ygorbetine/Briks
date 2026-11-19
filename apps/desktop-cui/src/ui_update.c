@@ -69,6 +69,12 @@ void update_dialog(cui_ctx *ui, app_state_t *s) {
 
 typedef struct { const char *version; const char *items[14]; } notes_t;
 static const notes_t NOTES[] = {
+    { "1.6.2", {
+        "Amigos: bolinha verde de online na foto de quem está com o Briks aberto, na lista, no hub e no seu próprio perfil.",
+        "Amigos: quando um amigo fica online ou entra na sua chamada, aparece um cartão no canto da tela, no estilo da Steam. Clicar nele abre a conversa.",
+        "Amigos: botão direito no nome do amigo abre um menu com mensagem, ligar, chamar atenção, aviso de online, desfazer amizade e bloquear.",
+        "Board e anotações: o ponteiro mostra o ícone da ferramenta que você está usando.",
+        NULL } },
     { "1.6.1", {
         "Chamada: o modo Direto (ponto a ponto) passa a ser o padrão, para gastar menos do servidor de chamadas. Quem já escolheu outro modo em Configurações > Rede continua com a escolha. Todos da sala precisam estar no mesmo modo.",
         "Transmissão: 720p passa a ser a qualidade padrão.",
