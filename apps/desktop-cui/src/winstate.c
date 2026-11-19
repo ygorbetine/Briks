@@ -310,6 +310,7 @@ int sys_probe(const char *n) {
     if (!strcmp(n, "notif")) return g_notify_shown;
     if (!strcmp(n, "blocked")) return g_notify_blocked;
     if (!strcmp(n, "sounds")) return g_sound_played;
+    if (!strncmp(n, "toast_", 6)) { int tv = toastwin_probe(n + 6); if (tv != -9999) return tv; }
     if (!strcmp(n, "balloons")) return g_tray_balloons;
     if (!strcmp(n, "badge_ok")) return g_tray_badge_ok;
     if (!strcmp(n, "close_tray")) return g_sys.close_to_tray;
@@ -381,6 +382,11 @@ bool sys_script(const char *args) {
     else if (!strcmp(c, "msg") && n > 3 && g_s) { char x[300]; snprintf(x, sizeof x, "%s", strstr(rest, t[2]) ? strstr(rest, t[2]) + strlen(t[2]) + 1 : ""); notify_chat_message(g_s, t[1], t[2], x); }   /* msg <canal> <autor> <texto> */
     else if (!strcmp(c, "friend") && g_s) notify_friend(g_s, rest1, false);
     else if (!strcmp(c, "friendcall") && g_s) notify_friend(g_s, rest1, true);
+    else if (!strcmp(c, "toast") && n > 1) toastwin_script(t[1], "Ficou online", false, n > 2 ? t[2] : NULL);   /* toast <nome> [arquivo-da-foto]: cartão fora da janela, de verdade */
+    else if (!strcmp(c, "toastcall") && n > 1) toastwin_script(t[1], "Entrou na sua chamada", true, NULL);
+    else if (!strcmp(c, "toastdump") && n > 1) toastwin_dump(rest1);
+    else if (!strcmp(c, "friendcard") && g_s && g_s->friend_count > 0) { notify_card_next(g_s->friends[0].id, g_s->friends[0].name, "Ficou online"); notify_friend(g_s, "alguem ficou online", false); }   /* o caminho real: regras do aviso -> cartão fora da janela */
+    else if (!strcmp(c, "toastclose")) toastwin_close();
     else if (!strcmp(c, "room") && n > 1 && g_s) g_s->in_room = atoi(t[1]) != 0;   /* simula entrar/sair da sala (sons, regra de "em chamada") */
     else if (!strcmp(c, "url") && n > 1) { if (sys_open_url(t[1])) g_url_ok++; else g_url_bad++; }
     else return false;

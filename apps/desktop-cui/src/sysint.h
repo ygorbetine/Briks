@@ -61,10 +61,21 @@ void tray_taskbar_badge(void *hwnd, int n, uint32_t rgb);   /* ícone de sobrepo
 enum { TRAY_CMD_NONE = 0, TRAY_CMD_OPEN = 1001, TRAY_CMD_MUTE = 1002, TRAY_CMD_RESTART = 1003, TRAY_CMD_QUIT = 1004 };
 extern int g_tray_balloons, g_tray_badge_ok, g_tray_icon_badged;             /* contadores de teste */
 
+/* ---- toastwin.c: cartão de aviso fora da janela do Briks (estilo Steam) ---- */
+bool toastwin_show(const char *id, const char *name, const char *what, bool call, const char *photo_path);   /* false = não abriu (teste automático ou falha): use o balão */
+bool toastwin_script(const char *name, const char *what, bool call, const char *photo_path);                 /* roteiro: abre mesmo em teste */
+bool toastwin_take_click(char *id, size_t cap);   /* clicou no cartão: id do amigo */
+bool toastwin_visible(void);
+void toastwin_close(void);
+bool toastwin_dump(const char *path);
+int toastwin_probe(const char *name);
+extern int g_toastwin_shown, g_toastwin_serial;
+
 /* ---- notify.c ---- */
 void notify_tick(app_state_t *s);                        /* sons da chamada, transmissão iniciada, contador, grace */
 void notify_post(app_state_t *s, notify_kind_t kind, const char *chan, const char *title, const char *text);   /* regras + balão + som + não lida */
 void notify_chat_message(app_state_t *s, const char *channel, const char *author, const char *content);       /* chat.message do core */
+void notify_card_next(const char *id, const char *name, const char *what);                                   /* o próximo notify_friend vira cartão fora da janela (com foto) */
 void notify_friend(app_state_t *s, const char *text, bool in_call);                                          /* amigo online / entrou na chamada (ui_friends.c) */
 void notify_open_channel(app_state_t *s, const char *channel);                                               /* abre a conversa (clique no aviso) */
 void notify_chat_opened(app_state_t *s);                 /* zera as não lidas da conversa aberta */

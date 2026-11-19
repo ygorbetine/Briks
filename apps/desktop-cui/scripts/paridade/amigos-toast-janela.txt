@@ -1,0 +1,21 @@
+# Cartao de aviso fora da janela (estilo Steam): janela propria, no topo, sem roubar o foco, no canto da area util; grava BMPs para conferir o desenho
+waitms 800
+expect toast_visible 0
+sys toast Maria
+waitms 3200
+expect toast_visible 1
+expect toast_topmost 1
+expect toast_noactivate 1
+expect toast_focus 0
+expect toast_inarea 1
+expect toast_corner 1
+sys toastdump C:/Users/YgorM/AppData/Local/Temp/claude/774b6f9dafe7925d/c61bf8de-7967-41ef-a31e-afb2aaa8a38e/scratchpad/toast1.bmp
+sys toastcall Joao
+waitms 500
+sys toastdump C:/Users/YgorM/AppData/Local/Temp/claude/774b6f9dafe7925d/c61bf8de-7967-41ef-a31e-afb2aaa8a38e/scratchpad/toast2.bmp
+sys toast Ana C:/Users/YgorM/AppData/Local/Temp/claude/774b6f9dafe7925d/c61bf8de-7967-41ef-a31e-afb2aaa8a38e/scratchpad/foto.jpg
+waitms 500
+sys toastdump C:/Users/YgorM/AppData/Local/Temp/claude/774b6f9dafe7925d/c61bf8de-7967-41ef-a31e-afb2aaa8a38e/scratchpad/toast3.bmp
+sys toastclose
+waitms 200
+expect toast_visible 0

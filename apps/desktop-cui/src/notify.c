@@ -13,6 +13,8 @@ int g_notify_shown, g_notify_blocked, g_sound_played;
 static sm_unread g_un;
 static ULONGLONG g_grace_until;
 static char g_click_chan[160];
+static struct { bool set; char id[48], name[96], what[64]; } g_card;   /* cartão pendente do próximo aviso de amigo */
+const char *friend_photo_path(const char *user_id);   /* account.c */
 static bool g_un_loaded;
 static int g_force_focus = -1;   /* roteiro: sys focus 0|1 (a janela oculta de teste nunca é a ativa) */
 static int g_last_total = -1, g_last_in_call = -1;
@@ -88,7 +90,9 @@ void notify_chat_opened(app_state_t *s) {
     if (s->screen == SCREEN_SOCIAL && s->chat_channel[0] && (s->active_friend >= 0 || s->active_group >= 0) && sys_window_focused()) sm_unread_clear(&g_un, s->chat_channel);
 }
 
+void notify_card_next(const char *id, const char *name, const char *what) { g_card.set = true; snprintf(g_card.id, sizeof g_card.id, "%s", id ? id : ""); snprintf(g_card.name, sizeof g_card.name, "%s", name ? name : ""); snprintf(g_card.what, sizeof g_card.what, "%s", what ? what : ""); }
 void notify_post(app_state_t *s, notify_kind_t kind, const char *chan, const char *title, const char *text) {
+    const bool card = g_card.set; g_card.set = false;
     sm_ctx c = { .nt_msg = g_sys.nt_msg, .nt_online = settings_nt_online(), .nt_stream = settings_nt_stream(), .friend_alerts_off = s->notify_off,
                  .focused = sys_window_focused(), .in_call = s->in_room, .grace = GetTickCount64() < g_grace_until, .same_chat = in_chat_view(s, chan) };
     if (kind == NT_MESSAGE && chan && chan[0] && !(c.focused && c.same_chat)) sm_unread_add(&g_un, chan);   /* conta mesmo sem aviso (badge) */
@@ -96,7 +100,9 @@ void notify_post(app_state_t *s, notify_kind_t kind, const char *chan, const cha
     char t[80], x[200]; sm_trunc(t, sizeof t, title && title[0] ? title : "Briks", 50); sm_trunc(x, sizeof x, text ? text : "", 120);
     if (chan && chan[0]) snprintf(g_click_chan, sizeof g_click_chan, "%s", chan); else g_click_chan[0] = 0;
     g_notify_shown++;
-    tray_balloon(t, x);
+    bool shown = false;
+    if (card && (kind == NT_FRIEND_ONLINE || kind == NT_FRIEND_CALL)) shown = toastwin_show(g_card.id, g_card.name, g_card.what, kind == NT_FRIEND_CALL, friend_photo_path(g_card.id));   /* cartão próprio por cima de tudo */
+    if (!shown) tray_balloon(t, x);
     sound_play(SND_NOTIFY);
 }
 

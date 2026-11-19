@@ -47,6 +47,11 @@ cui_texture friend_photo(const char *user_id) {
     for (int i = 0; i < MAX_FRIENDS; i++) if (g_fph[i].tex && !strcmp(g_fph[i].id, user_id)) return g_fph[i].tex;
     return 0;
 }
+const char *friend_photo_path(const char *user_id) {   /* arquivo da foto no cache (o cartão fora da janela decodifica sozinho) */
+    if (!user_id || !user_id[0]) return NULL;
+    for (int i = 0; i < MAX_FRIENDS; i++) if (g_fph[i].tex && !strcmp(g_fph[i].id, user_id)) return g_fph[i].path;
+    return NULL;
+}
 cui_texture friend_photo_by_name(const app_state_t *s, const char *name) {   /* mensagens e membros só trazem o nome: casa com a lista de amigos */
     if (!name || !name[0]) return 0;
     for (int i = 0; i < s->friend_count; i++) if (!strcmp(s->friends[i].name, name)) return friend_photo(s->friends[i].id);

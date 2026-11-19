@@ -187,8 +187,8 @@ void friends_notify_tick(app_state_t *s) {
         if (prev_n < 0 || s->notify_off || friends_bell_off(s, s->friends[i].id)) continue;   /* AMI-15: sino desligado = sem aviso */
         int k = -1; for (int q = 0; q < prev_n; q++) if (!strcmp(prev_id[q], s->friends[i].id)) k = q;
         if (k < 0) continue;
-        if (ncall[i] && !prev_call[k]) { char t[140]; snprintf(t, sizeof t, "%s entrou na sua chamada", s->friends[i].name); toast_show(&s->friends[i], "Entrou na sua chamada", true); cui_request_redraw(cui_app_ui(s->app)); notify_friend(s, t, true); }
-        else if (nid[i] && !prev_on[k]) { char t[140]; snprintf(t, sizeof t, "%s ficou online", s->friends[i].name); toast_show(&s->friends[i], "Ficou online", false); cui_request_redraw(cui_app_ui(s->app)); notify_friend(s, t, false); }
+        if (ncall[i] && !prev_call[k]) { char t[140]; snprintf(t, sizeof t, "%s entrou na sua chamada", s->friends[i].name); const int sv = g_toastwin_serial; notify_card_next(s->friends[i].id, s->friends[i].name, "Entrou na sua chamada"); notify_friend(s, t, true); if (g_toastwin_serial == sv) toast_show(&s->friends[i], "Entrou na sua chamada", true); cui_request_redraw(cui_app_ui(s->app)); }
+        else if (nid[i] && !prev_on[k]) { char t[140]; snprintf(t, sizeof t, "%s ficou online", s->friends[i].name); const int sv = g_toastwin_serial; notify_card_next(s->friends[i].id, s->friends[i].name, "Ficou online"); notify_friend(s, t, false); if (g_toastwin_serial == sv) toast_show(&s->friends[i], "Ficou online", false); cui_request_redraw(cui_app_ui(s->app)); }
     }
     for (int i = 0; i < n; i++) { snprintf(prev_id[i], sizeof prev_id[i], "%s", s->friends[i].id); prev_on[i] = nid[i]; prev_call[i] = ncall[i]; }
     prev_n = n;

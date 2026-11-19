@@ -1,0 +1,16 @@
+# Amigo ficou online com o Briks FORA de foco: o aviso vira o cartao proprio (nao o balao); em foco, nada de cartao fora da janela; sino do amigo respeitado
+waitms 800
+sys focus 1
+sys friendcard
+waitms 300
+expect toast_visible 0
+sys focus 0
+sys friendcard
+waitms 400
+expect toast_visible 1
+expect balloons 0
+sys toastclose
+sys room 1
+sys friendcard
+waitms 300
+expect toast_visible 0
