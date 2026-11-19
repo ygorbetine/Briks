@@ -69,6 +69,10 @@ void update_dialog(cui_ctx *ui, app_state_t *s) {
 
 typedef struct { const char *version; const char *items[14]; } notes_t;
 static const notes_t NOTES[] = {
+    { "1.6.3", {
+        "Amigos: com o Briks minimizado, na bandeja ou em segundo plano, o aviso de amigo online ou entrando na sua chamada agora aparece como um cartão do Windows no canto da tela, por cima dos outros programas, com foto e bolinha verde. Clicar abre a conversa; o botão direito dispensa.",
+        "Amigos: o cartão não rouba o foco do que você está fazendo e some sozinho em 6 segundos (o mouse em cima segura). Com o Briks em foco continua o cartão de dentro do app.",
+        NULL } },
     { "1.6.2", {
         "Amigos: bolinha verde de online na foto de quem está com o Briks aberto, na lista, no hub e no seu próprio perfil.",
         "Amigos: quando um amigo fica online ou entra na sua chamada, aparece um cartão no canto da tela, no estilo da Steam. Clicar nele abre a conversa.",
