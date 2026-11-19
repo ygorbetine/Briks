@@ -1,0 +1,17 @@
+# Board: os botoes da barra de ferramentas respondem ao clique (antes a cobertura da propria barra bloqueava todos)
+waitms 1500
+click 700 35
+waitms 600
+expect annot.tool 1
+click 47 313
+waitms 300
+expect annot.tool 3
+click 79 376
+waitms 300
+expect annot.tool 8
+click 90 109
+waitms 300
+shot p1
+click 195 109
+waitms 400
+shot p2

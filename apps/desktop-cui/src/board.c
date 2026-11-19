@@ -161,6 +161,11 @@ void board_stage(cui_ctx *ui, app_state_t *s, float W, float H) {
                 cui_pop_id(ui);
             }
             if (g_npages < BOARD_PAGES && cui_button(ui, "+ Página", .variant = CUI_BUTTON_SECONDARY, .size = CUI_SIZE_SM)) { g_page = g_npages; g_npages++; }
+            if (cui_button(ui, "Apagar página", .variant = CUI_BUTTON_SECONDARY, .size = CUI_SIZE_SM)) {   /* limpa a página (o que é seu; o dono da sala limpa tudo) e, sendo a última, tira a aba */
+                actx_t dc; memset(&dc, 0, sizeof dc); dc.board = true; snprintf(dc.base, sizeof dc.base, "b:%d", g_page);
+                annot_clear_scope(s, &dc);
+                if (g_page == g_npages - 1 && g_npages > 1) { g_npages--; g_page = g_npages - 1; say("Página apagada.", NULL); } else say("Página limpa.", NULL);
+            }
             cui_box(ui, .width = CUI_FILL, .height = CUI_PX(1));
             const unsigned long long t = GetTickCount64();
             if (g_msg[0] && t - g_msg_t < 6000) cui_box(ui, .max_width = fmaxf(W * 0.35f, 120.0f), .clip = true) { cui_text(ui, g_msg, .size = 12, .color = B_MUTED, .nowrap = true); }

@@ -720,7 +720,7 @@ static bool icon_btn(cui_ctx *ui, const char *id, const char *icon, bool on, con
 }
 static const unsigned PALETTE[8] = { 0xe53935, 0xfb8c00, 0xfdd835, 0x43a047, 0x1e88e5, 0x8e24aa, 0xffffff, 0x111111 };
 
-static void toolbar_body(cui_ctx *ui, app_state_t *s, const actx_t *cx, bool closable, bool *close) {
+static void toolbar_body_inner(cui_ctx *ui, app_state_t *s, const actx_t *cx, bool closable, bool *close) {
     static const char *TIPS[T_COUNT] = { "", "Caneta", "Marca-texto", "Linha", "Seta", "Retângulo", "Elipse", "Texto", "Borracha (traço inteiro)", "Borracha (área)", "Laser (some em 1 s)" };
     snprintf(g_me, sizeof g_me, "%s", s->rtc_fp[0] ? s->rtc_fp : "local-demo");
     const bool can = can_share(s, cx);
@@ -769,6 +769,10 @@ static void toolbar_body(cui_ctx *ui, app_state_t *s, const actx_t *cx, bool clo
         if (cui_color_picker(ui, "ancp", &c)) g_color = ((unsigned)c.r << 16) | ((unsigned)c.g << 8) | c.b;
     }
 }
+
+/* A barra registra a própria área como coberta (para o que está por baixo, a superfície de desenho, não receber o clique); os botões DELA têm de continuar valendo:
+ * sem g_cov_own a cobertura bloqueava todos eles (Board e anotação sobre a transmissão ficavam sem resposta). */
+static void toolbar_body(cui_ctx *ui, app_state_t *s, const actx_t *cx, bool closable, bool *close) { g_cov_own++; toolbar_body_inner(ui, s, cx, closable, close); g_cov_own--; }
 
 void annot_toolbar_board(cui_ctx *ui, app_state_t *s, const actx_t *cx) { bool c = false; toolbar_body(ui, s, cx, false, &c); }
 
