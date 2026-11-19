@@ -187,7 +187,10 @@ typedef struct {
     char ice_note[120];   /* "Somente STUN" / "STUN + TURN" (evento ice.info do core) */
     char net_note[220];   /* modo de rede da chamada: "SFU · servidor" ou "P2P · motivo" (evento net.mode do core) */
     bool net_failed;      /* a entrada pelo servidor de chamadas falhou e nenhuma chamada abriu: a tela oferece "Entrar em modo P2P" */
-    bool force_p2p;       /* o usuário escolheu entrar em P2P nesta chamada (vale até sair dela) */
+    char net_ask[8];      /* a sala já está em outro modo ("sfu"/"p2p") e o usuário escolheu o dele de propósito: a tela pergunta (evento net.ask) */
+    char join_net[8];     /* modo a pedir no próximo room.join (vazio = o das Configurações) */
+    bool join_keep;       /* próximo room.join entra no modo pedido sem olhar o modo da sala */
+    bool force_p2p;     /* o usuário escolheu entrar em P2P nesta chamada (vale até sair dela) */
     bool net_sfu;         /* a chamada atual está no servidor de chamadas (SFU): o dono pode silenciar alguém para todos */
     /* tela Rede: TURN próprio (ice.json). A senha só existe aqui enquanto se digita; o core a cifra e nunca a devolve */
     bool ice_turn, ice_has_cred, ice_asked, ice_busy, ice_testing, ice_edit_init;
@@ -354,7 +357,8 @@ void fw_maybe_prompt(void); void fw_tick(void); void fw_dialog(cui_ctx *ui, app_
 bool fw_busy(void); bool fw_open(void); int fw_exists(void); const char *fw_msg(void); const char *fw_state_text(void);
 int settings_net_pref(void);                               /* 0 Automático, 1 Internet direta, 2 VPN privada */
 int settings_idle_min(void);                              /* CHM-35: minutos sem falar até sair da chamada (0 = nunca) */
-int settings_call_mode(void);                              /* 0 Automático, 1 P2P, 2 SFU (Configurações > Rede) */
+bool settings_call_mode_chosen(void);                         /* true se o modo da chamada foi escolhido pelo usuário (não o padrão) */
+int settings_call_mode(void);                            /* 0 Automático, 1 P2P, 2 SFU (Configurações > Rede) */
 void settings_codec_mode_set(int m); int settings_codec_mode(void);   /* codec da transmissão: 0 Automático, 1 H.264, 2 VP9, 3 VP8 (settings.c) */
 const char *settings_codec_rec(void); const char *settings_codec_msg(void); bool settings_codec_hw(void); int settings_codec_h(void);   /* último "Testar meu PC" */
 void settings_codec_result_set(const char *rec, bool hw, int h, const char *msg);
@@ -393,7 +397,8 @@ bool rtc_saved_mute(const char *fp);                       /* 'Silenciar para mi
 float *share_remote_volume(app_state_t *s, int i);   /* volume do ÁUDIO da transmissão de quem está no slot i (0..2, 1 = normal; inicia em 1) */
 void share_remote_volume_changed(app_state_t *s, int i);   /* avisa o core depois de mudar o volume da transmissão */
 void rtc_mute_peer(app_state_t *s, int slot, bool muted);   /* ganho zero só para essa pessoa */
-void rtc_join_p2p(app_state_t *s);                          /* reentra na mesma sala pedindo P2P de propósito (depois de o SFU falhar) */
+void rtc_join_ask(app_state_t *s, bool follow_room);          /* responde ao net.ask: true entra no modo da sala, false mantém o escolhido */
+void rtc_join_p2p(app_state_t *s);                         /* reentra na mesma sala pedindo P2P de propósito (depois de o SFU falhar) */
 void rtc_room_mute(app_state_t *s, int slot, bool muted);   /* só o dono, só no SFU: fecha/reabre o microfone da pessoa para todos */
 void rtc_pump(app_state_t *s);
 void rtc_chat_event(const char *fields);   /* assina e envia um chat.event (campos JSON sem chaves) a quem está na sala */                           /* a cada quadro: consome eventos do core */

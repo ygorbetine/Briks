@@ -912,6 +912,19 @@ void ui_call(cui_ctx *ui, app_state_t *s) {
                         if (cui_button(ui, "Usar modo direto agora", .variant = CUI_BUTTON_PRIMARY)) rtc_join_p2p(s);
                     }
                 }
+                if (s->net_ask[0]) {
+                    /* a sala está em outro modo e o usuário escolheu o dele de propósito: pergunta em vez de trocar em silêncio */
+                    const bool room_sfu = !strcmp(s->net_ask, "sfu");
+                    cui_box(ui, .dir = CUI_ROW, .gap = 12, .pad_x = 14, .pad_y = 10, .radius = 14, .bg = CUI_RGBA(0xf5a52422), .border = 1, .border_color = CUI_RGBA(0xf5a52466), .width = CUI_FILL, .align = CUI_ALIGN_CENTER) {
+                        cui_icon(ui, CUI_ICON_PHONE, 18, CUI_RGB(0xf5a524));
+                        cui_column(ui, .gap = 2, .width = CUI_FILL) {
+                            cui_text(ui, room_sfu ? "Esta chamada está no modo Servidor, mas você escolheu o modo Direto." : "Esta chamada está no modo Direto, mas você escolheu o modo Servidor.", .size = 14);
+                            cui_text(ui, "Em modos diferentes vocês não se ouvem. Sua escolha em Configurações > Rede continua a mesma.", .size = 12, .color = B_MUTED);
+                        }
+                        if (cui_button(ui, room_sfu ? "Entrar no Servidor" : "Entrar no Direto", .variant = CUI_BUTTON_PRIMARY)) rtc_join_ask(s, true);
+                        if (cui_button(ui, "Manter o meu")) rtc_join_ask(s, false);
+                    }
+                }
                 if (s->in_room && s->rtc_overflow > 0 && s->call_view != 1) {
                     /* mais gente na chamada do que quadros na grade: estão ouvindo e falando; sobem quando abrir vaga */
                     cui_box(ui, .dir = CUI_ROW, .gap = 8, .pad_x = 12, .pad_y = 6, .radius = 12, .bg = B_GLASS, .border = 1, .border_color = B_GLASS_BORDER, .align = CUI_ALIGN_CENTER) {
@@ -923,7 +936,7 @@ void ui_call(cui_ctx *ui, app_state_t *s) {
                    então medir o palco ou a raiz realimentava o tamanho antigo (ao sair da tela cheia a barra era empurrada para fora) */
                 const float rw = vp.x, rh = vp.y - 4.0f - titlebar_height();   /* desconta a barra de título própria: sem isto o palco passava da base da janela e a barra de controles saía cortada */
                 float W = rw - pad * 2, H = rh - (g_call.fullscreen ? 0.0f : 70.0f + 1.0f + bar_h) - pad * 2;
-                if (s->net_failed) H -= 78.0f;                               /* faixa "não foi possível entrar pelo servidor" */
+                if (s->net_failed || s->net_ask[0]) H -= 78.0f;                              /* faixa "não foi possível entrar pelo servidor" */
                 if (s->in_room && s->rtc_overflow > 0) H -= 46.0f;           /* faixa "+N pessoas fora da grade" */
                 if (W < 120) W = 120; if (H < 90) H = 90;
                 if (s->call_view == 1) stage_chat(ui, s);

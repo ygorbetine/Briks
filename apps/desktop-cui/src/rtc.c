@@ -51,7 +51,7 @@ void rtc_leave_room(app_state_t *s) {
     s->rtc_peer_count = s->rtc_authed_count = 0;
     if (core_state() == CORE_READY) send_cmd("room.leave", NULL);
     copy(s->rtc_state, sizeof s->rtc_state, "");
-    s->rtc_owner_me = false; s->kick_open = false; s->net_sfu = false; s->net_failed = false; s->force_p2p = false;
+    s->rtc_owner_me = false; s->kick_open = false; s->net_sfu = false; s->net_failed = false; s->force_p2p = false; s->net_ask[0] = 0; s->join_net[0] = 0; s->join_keep = false;
     over_clear(s);
     memset(s->rtc_peers, 0, sizeof s->rtc_peers);
     share_reset(s);
@@ -80,6 +80,18 @@ void rtc_stream_reply(const char *peer_id, bool accepted) {
 
 /* A entrada pelo servidor de chamadas falhou e o usuário escolheu seguir em P2P: entra de novo na mesma sala com "net":"p2p".
    Só fala com quem também estiver em P2P (o aviso da tela diz isso). */
+void rtc_join_ask(app_state_t *s, bool follow_room) {
+    char room[sizeof s->room_name]; copy(room, sizeof room, s->room_name);
+    char mine[8]; copy(mine, sizeof mine, settings_call_mode() == 2 ? "sfu" : "p2p");
+    char to[8]; copy(to, sizeof to, follow_room ? s->net_ask : mine);
+    s->rtc_session_sent = s->rtc_session_ready;
+    s->net_ask[0] = 0;
+    rtc_join_room(s, room);
+    copy(s->join_net, sizeof s->join_net, to); s->join_keep = true;   /* entra no modo pedido, sem espiar a sala de novo */
+    if (follow_room && !strcmp(to, "p2p")) s->force_p2p = true;
+    if (follow_room) { char m[160]; snprintf(m, sizeof m, "Você entrou no modo %s, o mesmo da sala. Sua escolha em Configurações > Rede não mudou.", !strcmp(to, "sfu") ? "Servidor" : "Direto"); call_toast(m); }
+}
+
 void rtc_join_p2p(app_state_t *s) {
     char room[sizeof s->room_name]; copy(room, sizeof room, s->room_name);
     s->rtc_session_sent = s->rtc_session_ready;   /* a sessão do core continua valendo: só o room.join é refeito */
@@ -375,6 +387,15 @@ bool rtc_handle_event(app_state_t *s, const char *line) {
         const jval *c = json_get(j, "configured");
         s->net_cfg_known = true; s->net_cfg_sfu = c && c->type == J_BOOL && c->b;
         copy(s->net_cfg_err, sizeof s->net_cfg_err, json_str(j, "error", ""));
+    } else if (!strcmp(ev, "net.auto")) {
+        /* a sala já estava em outro modo e a pessoa não tinha escolhido o seu: o core entrou no da sala (sem isso cada um ficaria numa sala à parte) */
+        char m[200]; snprintf(m, sizeof m, "Esta chamada já está no modo %s; o seu foi trocado para combinar e vocês se ouvirem.", !strcmp(json_str(j, "to", ""), "sfu") ? "Servidor" : "Direto");
+        call_toast(m); settings_notice(m);
+        changed = true;
+    } else if (!strcmp(ev, "net.ask")) {
+        copy(s->net_ask, sizeof s->net_ask, json_str(j, "room_mode", ""));
+        copy(s->rtc_state, sizeof s->rtc_state, "aguardando");
+        changed = true;
     } else if (!strcmp(ev, "net.mode")) {
         const char *md = json_str(j, "mode", ""), *er = json_str(j, "error", "");
         s->net_sfu = !strcmp(md, "sfu");
@@ -531,9 +552,14 @@ void rtc_pump(app_state_t *s) {
         groups_roster_tick(s);
         chat_dm_tick(s);
         if (s->rtc_want_room && s->rtc_session_ready) {
-            char extra[256], rm[160];
+            char extra[320], rm[160];
             json_escape(s->room_name, rm, sizeof rm);
-            { int cm = settings_call_mode(); snprintf(extra, sizeof extra, "\"namespace\":\"room\",\"room\":\"%s\",\"net\":\"%s\",\"pref\":%d", rm, (cm == 1 || s->force_p2p) ? "p2p" : cm == 2 ? "sfu" : "auto", settings_net_pref()); }
+            { int cm = settings_call_mode();
+              /* "explicit": o usuário escolheu este modo de propósito -> o core pergunta (net.ask) em vez de trocar para o modo da sala; "keep": já respondeu */
+              const char *nt = s->join_net[0] ? s->join_net : (cm == 1 || s->force_p2p) ? "p2p" : cm == 2 ? "sfu" : "auto";
+              const bool expl = settings_call_mode_chosen() && cm != 0 && !s->join_net[0];
+              snprintf(extra, sizeof extra, "\"namespace\":\"room\",\"room\":\"%s\",\"net\":\"%s\",\"pref\":%d,\"explicit\":%s,\"keep\":%s", rm, nt, settings_net_pref(), expl ? "true" : "false", s->join_keep ? "true" : "false");
+              s->join_net[0] = 0; s->join_keep = false; }
             send_cmd("room.join", extra);
             if (!g_sys.mic_on) send_cmd("mic.set", "\"on\":false");
             if (g_sys.deaf) send_cmd("deafen.set", "\"on\":true");

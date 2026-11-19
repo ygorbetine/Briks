@@ -365,6 +365,13 @@ pub fn fetch_room_empty(token_url: &str, access_token: &str, room: &str) -> Resu
     fetch_token_inner(token_url, access_token, room).map(|t| t.2)
 }
 
+/// Como `fetch_room_empty`, mas devolve também o token e a URL do servidor: quem entra em seguida usa ESTE token em vez de pedir outro
+/// (cada pedido conta no limite de 30 tokens / 10 min por usuário; antes a entrada gastava dois: um para espiar e outro para entrar).
+pub type RoomProbe = (String, Option<String>, bool);
+pub fn fetch_room_probe(token_url: &str, access_token: &str, room: &str) -> Result<RoomProbe, TokenFail> {
+    fetch_token_inner(token_url, access_token, room)
+}
+
 /// Diferença (segundos) entre o relógio do servidor de tokens e o deste PC, lida do cabeçalho `Date` da última resposta. Um relógio fora
 /// de hora faz a sessão expirada parecer válida e o servidor de chamadas recusar o token da sala (401): a mensagem de erro cita isto.
 static CLOCK_SKEW_S: AtomicI64 = AtomicI64::new(0);
@@ -1026,8 +1033,7 @@ impl Actor {
                 let now = scr.map(|t| (share::strip_slot_name(&t.name).to_string(), t.width, t.height));
                 // dentro do prazo pós-reconexão, "sem tela" pode ser só "ainda não republicou": espera (expire_stale decide)
                 // o áudio da tela pode chegar DEPOIS do vídeo: sem reanunciar, o app nunca soube que há áudio (sem barra de volume)
-                let audio_changed = slot == 0 && now.is_some() && now == k.share[slot] && has_audio != k.saudio;
-                if (now != k.share[slot] || audio_changed) && !(now.is_none() && self.stale.contains_key(&p.identity)) {
+                if share_reannounce(slot, &now, &k.share[slot], has_audio, k.saudio) && !(now.is_none() && self.stale.contains_key(&p.identity)) {
                     k.share[slot] = now.clone();
                     if slot == 0 { k.saudio = has_audio; }
                     if now.is_none() { let r = self.shared.lock().unwrap().recv.get(&share::recv_key(&p.identity, slot)).cloned(); if let Some(r) = r { r.watching.store(false, Ordering::Relaxed); } }
@@ -1588,6 +1594,30 @@ mod t {
     fn url_building() {
         assert_eq!(ws_url("ws://127.0.0.1:7880/", "T"), "ws://127.0.0.1:7880/rtc?access_token=T&protocol=15&auto_subscribe=0&sdk=rust&version=briks-0.1&adaptive_stream=0");
         assert!(ws_url("https://x.livekit.cloud", "T").starts_with("wss://x.livekit.cloud/rtc?"));
+    }
+}
+
+/// A tela de um participante precisa ser (re)anunciada à UI? Sim quando a faixa de vídeo mudou (apareceu, sumiu, outro rótulo/tamanho) ou,
+/// na tela 1, quando o ÁUDIO da tela apareceu/sumiu com o vídeo já anunciado: ele costuma chegar depois do vídeo e, sem reanunciar,
+/// o app nunca soube que havia áudio (sem barra de volume). Mesma regra nos dois modos (o P2P anuncia na própria faixa de áudio).
+pub(crate) fn share_reannounce(slot: usize, now: &Option<(String, u32, u32)>, prev: &Option<(String, u32, u32)>, has_audio: bool, prev_audio: bool) -> bool {
+    now != prev || (slot == 0 && now.is_some() && has_audio != prev_audio)
+}
+
+#[cfg(test)]
+mod share_reannounce_tests {
+    use super::share_reannounce as r;
+    #[test]
+    fn audio_depois_do_video_reanuncia_e_o_resto_nao() {
+        let v = Some(("Tela 1".to_string(), 1920, 1080));
+        assert!(r(0, &v, &None, false, false), "vídeo novo anuncia");
+        assert!(!r(0, &v, &v, false, false), "nada mudou: não repete");
+        assert!(r(0, &v, &v, true, false), "o áudio da tela chegou depois do vídeo: reanuncia (barra de volume)");
+        assert!(!r(0, &v, &v, true, true));
+        assert!(r(0, &v, &v, false, true), "o áudio da tela parou");
+        assert!(!r(1, &v, &v, true, false), "a 2ª tela não tem áudio próprio");
+        assert!(r(0, &None, &v, false, true), "tela parou");
+        assert!(!r(0, &None, &None, true, false), "sem vídeo, só áudio não anuncia tela");
     }
 }
 
