@@ -132,7 +132,7 @@ int main(void) {
     OK(share_ds_steps(1920, 0) == 0 && share_ds_steps(1920, 1800) == 0 && share_ds_steps(1920, 700) == 1 && share_ds_steps(1920, 400) == 1 && share_ds_steps(1920, 300) == 2 && share_ds_steps(1920, 100) == 3, "redução do quadro: só quando aparece bem menor (e nunca abaixo de 1,25x)");
     { unsigned char src[4 * 4 * 4], dst[2 * 2 * 4]; for (int i = 0; i < 16; i++) { src[i * 4] = (unsigned char)(i % 2 ? 200 : 100); src[i * 4 + 1] = 50; src[i * 4 + 2] = 0; src[i * 4 + 3] = 255; }
       share_box_down(src, 4, 1, 2, 2, dst); OK(dst[0] == 150 && dst[1] == 50 && dst[2] == 0 && dst[3] == 255 && dst[12] == 150, "média dos 4 pixels de cada bloco 2x2"); }
-    OK(settings_migrate_call_mode(2, false) == 0 && settings_migrate_call_mode(2, true) == 2 && settings_migrate_call_mode(1, false) == 1 && settings_migrate_call_mode(0, true) == 0 && settings_migrate_call_mode(7, true) == 0, "modo da chamada: SFU gravado sem escolha migra para Automático; escolhido manualmente fica");
+    OK(settings_migrate_call_mode(2, false) == 1 && settings_migrate_call_mode(0, false) == 1 && settings_migrate_call_mode(2, true) == 2 && settings_migrate_call_mode(0, true) == 0 && settings_migrate_call_mode(7, true) == 1, "modo da chamada: sem escolha do usuário fica no Direto (P2P); escolhido manualmente fica");
     { /* encaixe estável: a fonte vai de 1080p para 720p e volta; o retângulo exibido não pode mudar (nem 1 px) */
         share_aspect_t st; share_aspect_reset(&st);
         const int res[][2] = { {1920,1080}, {1920,1080}, {1280,720}, {1280,720}, {960,540}, {1920,1080}, {1278,720}, {640,360}, {1920,1080} };

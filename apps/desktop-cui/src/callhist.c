@@ -179,4 +179,4 @@ void share_fit_rect(float aw, float ah, float ar, float *dw, float *dh) {
     *dw = w; *dh = h;
 }
 
-int settings_migrate_call_mode(int mode, bool chosen) { if (mode < 0 || mode > 2) return 0; return (mode == 2 && !chosen) ? 0 : mode; }
+int settings_migrate_call_mode(int mode, bool chosen) { if (!chosen) return 1; return (mode < 0 || mode > 2) ? 1 : mode; }   /* 1.6.1: quem nunca escolheu fica no Direto (P2P); quem escolheu mantém a escolha */

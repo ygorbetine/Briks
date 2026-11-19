@@ -36,7 +36,7 @@ typedef struct {
     bool echo, excl_audio;
     int idle_min;                 /* CHM-35: minutos sem falar até sair da chamada (0 = nunca); padrão 60 */
     int fw_choice;                /* Firewall: 0 não decidido, 1 liberado, 2 agora não, 3 não perguntar */
-    bool call_mode_set;           /* o usuário escolheu o modo da chamada (sem isso, 2/SFU gravado é o padrão antigo e migra para Automático) */
+    bool call_mode_set;           /* o usuário escolheu o modo da chamada (sem isso, o padrão é o Direto/P2P) */
     int net_pref, call_mode;      /* conexão: auto/internet direta/VPN privada; chamada: auto/P2P/SFU */
     bool ov_on; float ov_opacity; bool ov_live, ov_voice, ov_status, ov_mute, ov_selfshare, ov_through; int ov_corner;   /* sobreposição: canto 0 sup. direito, 1 sup. esquerdo, 2 inf. direito, 3 inf. esquerdo */
     char key_mute[24], key_deafen[24], key_stream[24], key_ptt[24];
@@ -117,8 +117,8 @@ static void load_inner(void) {
     defaults();
     { const char *ts = getenv("BRIKS_TEXT_SIZE"); if (ts) g_set.text_size = atoi(ts); }
     { const char *im = getenv("BRIKS_IDLE_MIN"); if (im) g_set.idle_min = atoi(im); }   /* testes: prazo de inatividade em minutos (0 = nunca) */   /* capturas */
-    char p[MAX_PATH]; if (getenv("BRIKS_DEMO") || !cfg_path(p, sizeof p)) return;
-    FILE *f = fopen(p, "rb"); if (!f) return;
+    char p[MAX_PATH]; if (getenv("BRIKS_DEMO") || !cfg_path(p, sizeof p)) { g_set.call_mode = settings_migrate_call_mode(g_set.call_mode, g_set.call_mode_set); return; }   /* sem arquivo: o padrão é o Direto/P2P */
+    FILE *f = fopen(p, "rb"); if (!f) { g_set.call_mode = settings_migrate_call_mode(g_set.call_mode, g_set.call_mode_set); return; }
     char ln[480];   /* cabe codec_msg (320) */
     while (fgets(ln, sizeof ln, f)) {
         char *eq = strchr(ln, '='); if (!eq) continue; *eq = 0; char *v = eq + 1; v[strcspn(v, "\r\n")] = 0;
@@ -128,7 +128,7 @@ static void load_inner(void) {
         }
     }
     fclose(f);
-    const int cm = settings_migrate_call_mode(g_set.call_mode, g_set.call_mode_set);   /* padrão antigo "Sempre SFU" -> Automático (uma vez; quem escolheu fica) */
+    const int cm = settings_migrate_call_mode(g_set.call_mode, g_set.call_mode_set);   /* sem escolha do usuário -> Direto/P2P (quem escolheu fica) */
     if (cm != g_set.call_mode) { g_set.call_mode = cm; save(); }
 }
 static void save(void) {
@@ -575,7 +575,7 @@ void settings_dialog(cui_ctx *ui, app_state_t *s) {
                                 if (cui_button(ui, "Cancelar", .variant = CUI_BUTTON_LINK, .size = CUI_SIZE_SM)) pend_cm = -1;
                             }
                         }
-                        sub(ui, g_set.call_mode == 0 ? "Padrão: usa o servidor de chamadas quando ele está configurado; sem ele, modo direto (ponto a ponto). Se o servidor falhar, mostra o erro e oferece entrar no modo direto; nunca troca sozinho." : g_set.call_mode == 1 ? "Conexão direta entre todos, até 8 pessoas. Sem servidor no meio, mesmo com o servidor de chamadas configurado." : "Passa sempre pelo servidor, nunca cai no modo direto sozinho. Melhor para salas grandes e redes difíceis.");
+                        sub(ui, g_set.call_mode == 0 ? "Usa o servidor de chamadas quando ele está configurado; sem ele, modo direto (ponto a ponto). Se o servidor falhar, mostra o erro e oferece entrar no modo direto; nunca troca sozinho." : g_set.call_mode == 1 ? "Padrão: conexão direta entre todos, até 8 pessoas, sem gastar o servidor de chamadas. Sem servidor no meio, mesmo com o servidor de chamadas configurado." : "Passa sempre pelo servidor, nunca cai no modo direto sozinho. Melhor para salas grandes e redes difíceis.");
                         sub(ui, "Todos da sala precisam usar o mesmo modo. Vale a partir da próxima chamada.");
                         if (s->net_cfg_known) sub(ui, s->net_cfg_err[0] ? s->net_cfg_err : s->net_cfg_sfu ? "Servidor de chamadas: configurado." : g_set.call_mode == 2 ? "Servidor de chamadas: não configurado; \"Sempre servidor\" usa o modo direto até configurar." : "Servidor de chamadas: não configurado; as chamadas usam o modo direto (ponto a ponto).");
                     }
