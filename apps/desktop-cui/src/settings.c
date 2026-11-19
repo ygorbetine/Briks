@@ -262,7 +262,7 @@ void settings_ovl_reset(void) { g_set.ov_tiles[0] = 0;  g_set.ov_lay[0] = 0; g_s
 bool settings_echo(void) { return g_set.echo; }
 bool settings_nt_online(void) { return g_set.nt_online; }
 bool settings_nt_stream(void) { return g_set.nt_stream; }
-void settings_audio_set(float in_vol, float out_vol, bool gate_on, float gate_db) { g_set.in_vol = in_vol < 0 ? 0 : in_vol > 100 ? 100 : in_vol; g_set.out_vol = out_vol < 0 ? 0 : out_vol > 100 ? 100 : out_vol; g_set.gate_on = gate_on; g_set.gate_db = gate_db < -70 ? -70 : gate_db > -20 ? -20 : gate_db; }   /* ajustes de áudio da chamada (ui_call.c): settings_tick grava */
+void settings_audio_set(float in_vol, float out_vol, bool gate_on, float gate_db) { g_set.in_vol = in_vol < 0 ? 0 : in_vol > 100 ? 100 : in_vol; g_set.out_vol = out_vol < 0 ? 0 : out_vol > 200 ? 200 : out_vol; g_set.gate_on = gate_on; g_set.gate_db = gate_db < -70 ? -70 : gate_db > -20 ? -20 : gate_db; }   /* ajustes de áudio da chamada (ui_call.c): settings_tick grava */
 static void tag_nofx(cui_ctx *ui) {   /* selo discreto: controle salvo localmente, sem efeito real ainda */
     cui_text(ui, "Em breve · salvo neste computador, ainda sem efeito", .size = 12, .color = g_th.ph);
 }
@@ -527,7 +527,7 @@ void settings_dialog(cui_ctx *ui, app_state_t *s) {
                         cui_select(ui, "cfg-out", out_ptr, out_n, &g_set.out);
                         sub(ui, "Vale na hora para as vozes da sala. Se o aparelho sumir, volta ao padrão do sistema.");
                         cui_text(ui, "Volume de saída", .size = 12, .color = B_MUTED);
-                        briks_volume(ui, "cfg-outvol", &g_set.out_vol, 0.0f, 100.0f, 1.0f, NULL, true);
+                        briks_volume(ui, "cfg-outvol", &g_set.out_vol, 0.0f, 200.0f, 1.0f, NULL, true);
                         sub(ui, "O volume vale na hora, para tudo que você ouve na sala.");
                     }
                     SCARD(ui, "PROCESSAMENTO") {

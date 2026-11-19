@@ -55,7 +55,7 @@ impl RxStat {
 }
 
 #[derive(Default)]
-struct Sink { buf: VecDeque<f32>, primed: bool, gen: u64 }
+struct Sink { buf: VecDeque<f32>, primed: bool, gen: u64, boost: f32 }
 static SINK_GEN: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Default)]
@@ -150,6 +150,25 @@ fn default_device(host: &cpal::Host, input: bool) -> Option<cpal::Device> {
         if let Some(d) = list.into_iter().find(|d| d.name().map(|n| n == want).unwrap_or(false)) { return Some(d); }
     }
     if input { host.default_input_device() } else { host.default_output_device() }
+}
+
+/// Nivelador da voz recebida: alvo de ~0,12 RMS. `boost` (0 = ainda 1,0) é o ganho suavizado, entre 1,0 e 3,0; abaixo de 0,004 RMS
+/// (silêncio/ruído) não muda, para não levantar o chiado. Devolve o ganho a aplicar neste trecho.
+const LEVEL_TARGET: f32 = 0.12;
+const LEVEL_FLOOR: f32 = 0.004;
+const LEVEL_MAX: f32 = 3.0;
+fn level_voice(boost: &mut f32, samples: impl Iterator<Item = f32>) -> f32 {
+    if *boost == 0.0 { *boost = 1.0; }
+    let (mut sum, mut n) = (0.0f32, 0usize);
+    for v in samples { sum += v * v; n += 1; }
+    if n == 0 { return *boost; }
+    let r = (sum / n as f32).sqrt();
+    if r > LEVEL_FLOOR {
+        let want = (LEVEL_TARGET / r).clamp(1.0, LEVEL_MAX);
+        let k = if want < *boost { 0.3 } else { 0.02 };
+        *boost += (want - *boost) * k;
+    }
+    *boost
 }
 
 pub fn match_device(names: &[String], want: &str) -> Option<usize> {
@@ -351,7 +370,9 @@ impl Audio {
             let g = gains.get(peer).copied().unwrap_or(1.0);
             // ensurdecer corta só as VOZES; o áudio das transmissões ("peer#screen") segue, com o volume próprio de cada uma (1.4.4)
             let silent = (deaf && !peer.ends_with("#screen")) || muted.contains(peer);   // 1.5.20: mudo da voz vale só para a voz; a transmissão ("#screen") tem controle próprio
-            for (i, v) in s.buf.drain(..take).enumerate() { if !silent { out[i] += v * g; } }
+            // nivelador (só vozes): sobe até +9,5 dB quem fala baixo, devagar; desce rápido se a voz fica alta; sem fala, mantém.
+            let lv = if peer.ends_with("#screen") { 1.0 } else { level_voice(&mut s.boost, s.buf.iter().take(take).copied()) };
+            for (i, v) in s.buf.drain(..take).enumerate() { if !silent { out[i] += v * g * lv; } }
             if take < out.len() { s.primed = false; }
         }
         let og = f32::from_bits(self.out_gain.load(Ordering::Relaxed));
@@ -676,6 +697,24 @@ impl Drop for MicTest { fn drop(&mut self) { self.stop(); } }
 mod unit {
     use super::*;
 
+    /// Nivelador: voz baixa sobe (até 3x), voz alta fica como está, silêncio não é levantado.
+    #[test]
+    fn nivelador_sobe_voz_baixa_e_ignora_silencio() {
+        let mut b = 0.0f32;
+        let baixa: Vec<f32> = (0..960).map(|i| 0.03 * (i as f32 * 0.3).sin()).collect();
+        let mut g = 1.0;
+        for _ in 0..600 { g = level_voice(&mut b, baixa.iter().copied()); }
+        assert!(g > 2.0 && g <= LEVEL_MAX, "voz baixa deveria subir, ganho {g}");
+        let mut b2 = 0.0f32;
+        let alta: Vec<f32> = (0..960).map(|i| 0.4 * (i as f32 * 0.3).sin()).collect();
+        for _ in 0..50 { level_voice(&mut b2, alta.iter().copied()); }
+        assert!((b2 - 1.0).abs() < 1e-3, "voz alta não pode mudar, ganho {b2}");
+        let mut b3 = 0.0f32;
+        let chiado: Vec<f32> = (0..960).map(|i| 0.002 * (i as f32 * 0.3).sin()).collect();
+        for _ in 0..200 { level_voice(&mut b3, chiado.iter().copied()); }
+        assert!((b3 - 1.0).abs() < 1e-3, "chiado não pode subir, ganho {b3}");
+    }
+
     /// Só consulta (não abre áudio): o padrão de comunicação, se existir, tem de estar entre os dispositivos do cpal.
     #[test]
     fn padrao_de_comunicacao_resolve() {
@@ -697,7 +736,7 @@ mod unit {
         let (a, _rx) = Audio::new(true);
         let tone = |n: usize| -> std::collections::VecDeque<f32> { (0..n).map(|i| 0.4 * (2.0 * std::f32::consts::PI * 440.0 * (i / 2) as f32 / 48000.0).sin()).collect() };
         let plays = |a: &Audio, key: &str, n: usize| -> bool {
-            { let mut s = a.sinks.lock().unwrap(); s.clear(); s.insert(key.to_string(), Sink { buf: tone(n), primed: false, gen: 1 }); }
+            { let mut s = a.sinks.lock().unwrap(); s.clear(); s.insert(key.to_string(), Sink { buf: tone(n), primed: false, gen: 1, boost: 0.0 }); }
             let mut out = vec![0.0f32; FRAME * 2];
             a.mix_pull_stereo(&mut out);
             out.iter().any(|v| v.abs() > 0.05)
@@ -717,27 +756,27 @@ mod unit {
         let tone = |amp: f32, n: usize| -> Vec<f32> { (0..n).map(|i| amp * (2.0 * std::f32::consts::PI * 440.0 * (i / 2) as f32 / 48000.0).sin()).collect() };
         let fill = |a: &Audio| {
             let mut s = a.sinks.lock().unwrap();
-            for key in ["ana", "ana#screen"] { s.insert(key.to_string(), Sink { buf: tone(0.4, PRIME * 3).into(), primed: true, gen: 1 }); }
+            for key in ["ana", "ana#screen"] { s.insert(key.to_string(), Sink { buf: tone(0.4, PRIME * 3).into(), primed: true, gen: 1, boost: 0.0 }); }
         };
         let peak = |a: &Audio| { let mut out = vec![0.0f32; 960]; a.mix_pull_stereo(&mut out); out.iter().fold(0.0f32, |m, v| m.max(v.abs())) };
         // sem ensurdecer: voz + transmissão tocam
         fill(&a); assert!(peak(&a) > 0.5, "voz e transmissão somam");
         // ensurdecido: a voz some, a transmissão continua
         a.set_deaf(true);
-        { let mut s = a.sinks.lock().unwrap(); s.clear(); s.insert("ana".into(), Sink { buf: tone(0.4, PRIME * 3).into(), primed: true, gen: 1 }); }
+        { let mut s = a.sinks.lock().unwrap(); s.clear(); s.insert("ana".into(), Sink { buf: tone(0.4, PRIME * 3).into(), primed: true, gen: 1, boost: 0.0 }); }
         assert_eq!(peak(&a), 0.0, "ensurdecido: voz = 0");
-        { let mut s = a.sinks.lock().unwrap(); s.clear(); s.insert("ana#screen".into(), Sink { buf: tone(0.4, PRIME * 3).into(), primed: true, gen: 1 }); }
+        { let mut s = a.sinks.lock().unwrap(); s.clear(); s.insert("ana#screen".into(), Sink { buf: tone(0.4, PRIME * 3).into(), primed: true, gen: 1, boost: 0.0 }); }
         let p = peak(&a); assert!(p > 0.35 && p < 0.45, "ensurdecido: a transmissão mantém o ganho ({p})");
         // o volume por transmissão continua valendo ensurdecido, e o mudo dela (ganho 0) também
         a.set_screen_gain("ana", 0.5);
-        { let mut s = a.sinks.lock().unwrap(); s.clear(); s.insert("ana#screen".into(), Sink { buf: tone(0.4, PRIME * 3).into(), primed: true, gen: 1 }); }
+        { let mut s = a.sinks.lock().unwrap(); s.clear(); s.insert("ana#screen".into(), Sink { buf: tone(0.4, PRIME * 3).into(), primed: true, gen: 1, boost: 0.0 }); }
         let p = peak(&a); assert!(p > 0.15 && p < 0.25, "ensurdecido: volume 50% da transmissão ({p})");
         a.set_screen_gain("ana", 0.0);
-        { let mut s = a.sinks.lock().unwrap(); s.clear(); s.insert("ana#screen".into(), Sink { buf: tone(0.4, PRIME * 3).into(), primed: true, gen: 1 }); }
+        { let mut s = a.sinks.lock().unwrap(); s.clear(); s.insert("ana#screen".into(), Sink { buf: tone(0.4, PRIME * 3).into(), primed: true, gen: 1, boost: 0.0 }); }
         assert_eq!(peak(&a), 0.0, "ensurdecido: transmissão silenciada por ela mesma");
         // desensurdecer: a voz volta
         a.set_deaf(false); a.set_screen_gain("ana", 1.0);
-        { let mut s = a.sinks.lock().unwrap(); s.clear(); s.insert("ana".into(), Sink { buf: tone(0.4, PRIME * 3).into(), primed: true, gen: 1 }); }
+        { let mut s = a.sinks.lock().unwrap(); s.clear(); s.insert("ana".into(), Sink { buf: tone(0.4, PRIME * 3).into(), primed: true, gen: 1, boost: 0.0 }); }
         assert!(peak(&a) > 0.35, "voz volta ao desensurdecer");
     }
 
@@ -746,7 +785,7 @@ mod unit {
     fn muting_a_voice_leaves_the_stream_audio_alone() {
         let (a, _rx) = Audio::new(true);
         let tone = |amp: f32, n: usize| -> Vec<f32> { (0..n).map(|i| amp * (2.0 * std::f32::consts::PI * 440.0 * (i / 2) as f32 / 48000.0).sin()).collect() };
-        let one = |a: &Audio, key: &str| { { let mut s = a.sinks.lock().unwrap(); s.clear(); s.insert(key.to_string(), Sink { buf: tone(0.4, PRIME * 3).into(), primed: true, gen: 1 }); } let mut out = vec![0.0f32; 960]; a.mix_pull_stereo(&mut out); out.iter().fold(0.0f32, |m, v| m.max(v.abs())) };
+        let one = |a: &Audio, key: &str| { { let mut s = a.sinks.lock().unwrap(); s.clear(); s.insert(key.to_string(), Sink { buf: tone(0.4, PRIME * 3).into(), primed: true, gen: 1, boost: 0.0 }); } let mut out = vec![0.0f32; 960]; a.mix_pull_stereo(&mut out); out.iter().fold(0.0f32, |m, v| m.max(v.abs())) };
         a.mute_peer("ana", true);
         assert_eq!(one(&a, "ana"), 0.0, "voz silenciada");
         assert!(one(&a, "ana#screen") > 0.35, "a transmissão não é afetada pelo mudo da voz");

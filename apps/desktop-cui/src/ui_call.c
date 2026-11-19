@@ -573,7 +573,7 @@ static void audio_popover(cui_ctx *ui, app_state_t *s) {
         cui_row(ui, .gap = 10, .width = CUI_FILL, .align = CUI_ALIGN_CENTER) { cui_text(ui, "Volume de entrada", .size = 13, .width = CUI_FILL); char p[12]; snprintf(p, sizeof p, "%d%%", (int)(in_v + 0.5f)); cui_text(ui, p, .size = 12, .color = B_MUTED); }
         briks_volume(ui, "call-in", &in_v, 0.0f, 100.0f, 1.0f, NULL, false);
         cui_row(ui, .gap = 10, .width = CUI_FILL, .align = CUI_ALIGN_CENTER) { cui_text(ui, "Volume de saída", .size = 13, .width = CUI_FILL); char p[12]; snprintf(p, sizeof p, "%d%%", (int)(out_v + 0.5f)); cui_text(ui, p, .size = 12, .color = B_MUTED); }
-        briks_volume(ui, "call-out", &out_v, 0.0f, 100.0f, 1.0f, NULL, false);
+        briks_volume(ui, "call-out", &out_v, 0.0f, 200.0f, 1.0f, NULL, false);
         cui_separator(ui);
         cui_switch(ui, "Porta de ruído", &g2);
         if (g2) { cui_textf(ui, "Corta o microfone abaixo de %d dB", (int)gdb2); cui_slider(ui, "##call-gate", &gdb2, -70, -20, .width = CUI_FILL); }
