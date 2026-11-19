@@ -1,0 +1,31 @@
+# Board da sala: aba Board, desenho com o mouse, traços de outro par (coreev), paginas, fundo e exportacao PNG
+waitms 1500
+click 700 35
+waitms 400
+shot b0
+at 500 300
+waitms 80
+down
+waitms 80
+at 540 340
+waitms 80
+at 620 360
+waitms 80
+at 700 320
+waitms 80
+up
+waitms 300
+coreev {"ev":"annot.ops","scope":"b:0","from_fp":"fp-demo-0","ops":[{"i":1,"c":1,"k":"s","m":0,"col":16711680,"w":40,"p":[1000,1000,2000,1500,3000,1200,4500,2500,5500,2300]},{"i":2,"c":2,"k":"g","sh":"r","col":4572,"w":40,"f":1,"x0":6000,"y0":1500,"x1":8500,"y1":3500},{"i":3,"c":3,"k":"t","s":"Board ok","col":16777215,"sz":300,"x":3000,"y":7000}]}
+waitms 300
+expect annot.ops:b:0 4
+shot b1
+coreev {"ev":"annot.ops","scope":"b:2","from_fp":"fp-demo-0","ops":[{"i":4,"c":4,"k":"g","sh":"e","col":4572,"w":40,"f":0,"x0":2000,"y0":2000,"x1":7000,"y1":6000}]}
+waitms 300
+expect annot.ops:b:2 1
+shot b2
+click 1035 109
+waitms 300
+shot b3
+click 1223 109
+waitms 800
+shot b4

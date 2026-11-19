@@ -1,0 +1,41 @@
+# Anotacoes sobre a transmissao: Anotar liga a barra; desenho com o mouse; o dono remoto (coreev) desenha por cima; formas, texto e laser
+waitms 1500
+expect share_mode 1
+at 640 400
+waitms 300
+shot t0
+annot-on 0
+waitms 300
+shot t1
+at 400 300
+waitms 80
+down
+waitms 80
+at 420 330
+waitms 80
+at 470 350
+waitms 80
+at 540 340
+waitms 80
+at 600 300
+waitms 80
+up
+waitms 300
+expect annot.ops:L:s:fp-demo-0:0 1
+shot t2
+coreev {"ev":"annot.ops","scope":"s:fp-demo-0:0","from_fp":"fp-demo-0","ops":[{"i":1,"c":1,"k":"s","m":0,"col":16711680,"w":40,"p":[1000,1000,2000,1500,3000,1200,4500,2500,5500,2300]},{"i":2,"c":2,"k":"g","sh":"r","col":4572,"w":40,"f":1,"x0":6000,"y0":1500,"x1":8500,"y1":3500},{"i":3,"c":3,"k":"g","sh":"a","col":16765237,"w":60,"f":0,"x0":2000,"y0":8000,"x1":4500,"y1":6000},{"i":4,"c":4,"k":"t","s":"Olha aqui!","col":16777215,"sz":300,"x":6000,"y":7000},{"i":5,"c":5,"k":"s","m":1,"col":16765237,"w":40,"p":[1000,5000,5000,5100,9000,5000]},{"i":6,"c":6,"k":"g","sh":"e","col":4572,"w":40,"f":0,"x0":7000,"y0":5500,"x1":9000,"y1":6800}]}
+waitms 300
+expect annot.ops:s:fp-demo-0:0 6
+shot t3
+coreev {"ev":"annot.laser","scope":"s:fp-demo-0:0","a":"fp-demo-0","x":5000,"y":4000,"col":15024693}
+waitms 100
+shot t4
+annot-color 43a047
+annot-draw 0 ellf 1500,6000 3500,9000
+annot-draw 0 text:so_eu 1500,9300
+annot-draw 0 rect 3600,1200 4800,2200
+waitms 300
+shot t5
+annot-undo 0
+waitms 200
+expect annot.ops:L:s:fp-demo-0:0 3

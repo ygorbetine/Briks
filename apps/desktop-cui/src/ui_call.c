@@ -8,6 +8,8 @@
 #include "netdiag.h"
 #include "call_idle.h"
 #include "sons.h"
+#include "annot.h"
+#include "annot.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -876,6 +878,7 @@ void ui_call(cui_ctx *ui, app_state_t *s) {
                                 }
                             }
                             if (tab(ui, 12, CUI_ICON_MONITOR, "Transmissão", s->call_mode == 1, compact, 0)) s->call_mode = 1;
+                            if (tab(ui, 17, CUI_ICON_PENCIL, "Board", s->call_mode == 2, compact, 0)) { s->call_mode = 2; s->call_view = 0; }   /* quadro compartilhado da sala (board.c) */
                         }
                         {   /* Grade/Foco vale nos dois modos (Call: participantes; Transmissão: as transmissões); só esmaece no Chat e clicar volta para a Chamada */
                             const bool here = s->call_view == 0;
@@ -924,6 +927,7 @@ void ui_call(cui_ctx *ui, app_state_t *s) {
                 if (s->in_room && s->rtc_overflow > 0) H -= 46.0f;           /* faixa "+N pessoas fora da grade" */
                 if (W < 120) W = 120; if (H < 90) H = 90;
                 if (s->call_view == 1) stage_chat(ui, s);
+                else if (s->call_mode == 2) board_stage(ui, s, W, H);
                 else if (s->call_mode == 1) {
                     const bool streams = share_any_live(s) || s->sh.active || s->sh.second.active;
                     const float sw = streams ? side_people_width(s, W) : 0.0f;

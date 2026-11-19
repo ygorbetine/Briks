@@ -5,7 +5,7 @@ click 1100 261
 waitms 600
 expect share_mode 1
 shot v1
-click 545 35
+click 470 35
 waitms 500
 expect share_mode 0
 at 1100 300
@@ -15,7 +15,7 @@ waitms 500
 shot v2
 click 1180 565
 waitms 400
-click 700 35
+click 583 35
 waitms 800
 expect share_mode 1
 shot v3

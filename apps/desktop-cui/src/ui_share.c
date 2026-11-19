@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <windows.h>
+#include "annot.h"
 
 static void copy(char *dst, size_t cap, const char *src) { snprintf(dst, cap, "%s", src ? src : ""); }
 static int jint(const jval *j, const char *k) { const jval *v = json_get(j, k); return v && v->type == J_NUM ? (int)v->num : 0; }
@@ -290,11 +291,11 @@ static void start_selected(app_state_t *s) {
 
 void share_stop_second(app_state_t *s) {
     if (s->sh.second.active || s->sh.second.starting) cmd("{\"cmd\":\"share.stop\",\"slot\":1}");
-    memset(&s->sh.second, 0, sizeof s->sh.second); fv_close(&g_fv[FV2(BRIKS_MAX_PEERS)]);
+    memset(&s->sh.second, 0, sizeof s->sh.second); fv_close(&g_fv[FV2(BRIKS_MAX_PEERS)]); annot_stream_gone_own(s, 1);
 }
 
 /* parar a transmissão para as duas telas */
-void share_stop(app_state_t *s) { share_stop_second(s); cmd("{\"cmd\":\"share.stop\"}"); s->sh.active = false; s->sh.starting = false; }
+void share_stop(app_state_t *s) { share_stop_second(s); cmd("{\"cmd\":\"share.stop\"}"); s->sh.active = false; s->sh.starting = false; annot_stream_gone_own(s, 0); }
 
 void share_reset(app_state_t *s) {
     share_state_t *q = &s->sh;
@@ -421,7 +422,7 @@ bool share_handle_event(app_state_t *s, const jval *j, const char *ev) {
                 if (share_notice_wanted(q->remote2[i].on || q->remote[i].on, true, share_viewing(s))) { g_notice.slot = i; g_notice.until = -1; }
                 q->remote2[i].on = true; q->remote2[i].w = jint(j, "w"); q->remote2[i].h = jint(j, "h"); q->remote2[i].fps = jint(j, "fps"); q->remote2[i].kbps = jint(j, "kbps");
                 copy(q->remote2[i].label, sizeof q->remote2[i].label, json_str(j, "label", ""));
-            } else if (!strcmp(st, "off")) { memset(&q->remote2[i], 0, sizeof q->remote2[i]); memset(&q->aud[i][1], 0, sizeof q->aud[i][1]); fv_close(&g_fv[FV2(i)]); memset(&g_zoom[FV2(i)], 0, sizeof g_zoom[0]); }
+            } else if (!strcmp(st, "off")) { memset(&q->remote2[i], 0, sizeof q->remote2[i]); memset(&q->aud[i][1], 0, sizeof q->aud[i][1]); fv_close(&g_fv[FV2(i)]); annot_stream_gone(s, i, 1); memset(&g_zoom[FV2(i)], 0, sizeof g_zoom[0]); }
             else if (!strcmp(st, "watch")) copy(q->remote2[i].path, sizeof q->remote2[i].path, json_str(j, "path", ""));
             else if (!strcmp(st, "frame")) { q->remote2[i].has_frame = true; q->remote2[i].stalled = false; q->remote2[i].w = jint(j, "w"); q->remote2[i].h = jint(j, "h"); }
             else if (!strcmp(st, "stalled")) q->remote2[i].stalled = true;   /* 3 s sem pacote algum: tira a última imagem em vez de deixá-la parada */
@@ -474,7 +475,7 @@ bool share_handle_event(app_state_t *s, const jval *j, const char *ev) {
             if (!was_on) { q->remote[i].fps = jint(j, "fps"); q->remote[i].kbps = jint(j, "kbps"); }
             q->remote[i].audio = jbool(j, "audio"); copy(q->remote[i].label, sizeof q->remote[i].label, json_str(j, "label", ""));
         } else if (!strcmp(st, "off")) { memset(&q->aud[i][0], 0, sizeof q->aud[i][0]); q->remote[i].on = false; q->remote[i].watching = false; q->remote[i].has_frame = false; q->remote[i].poor = false; q->remote[i].stalled = false; q->remote[i].low_secs = 0; fv_close(&g_fv[i]);
-            memset(&g_zoom[i], 0, sizeof g_zoom[i]); if (g_notice.slot == i) g_notice.slot = -1; }
+            memset(&g_zoom[i], 0, sizeof g_zoom[i]); if (g_notice.slot == i) g_notice.slot = -1; annot_stream_gone(s, i, 0); }
         else if (!strcmp(st, "watch")) copy(q->remote[i].path, sizeof q->remote[i].path, json_str(j, "path", ""));
         else if (!strcmp(st, "frame")) { q->remote[i].has_frame = true; q->remote[i].stalled = false; q->remote[i].w = jint(j, "w"); q->remote[i].h = jint(j, "h"); }
         else if (!strcmp(st, "stalled")) q->remote[i].stalled = true;   /* 3 s sem pacote algum: tira a última imagem em vez de deixá-la parada */
@@ -1356,6 +1357,7 @@ bool share_hide_chip(cui_ctx *ui, app_state_t *s, bool compact) {
                     /* quem assiste: roda do mouse ou pinça ampliam em torno do ponteiro, arrastar move; a moldura fica do tamanho
                        da imagem encaixada (cantos curvos, nada vaza) e o zoom nunca fica abaixo do encaixe */
                     cui_box(ui, .width = CUI_PX(floorf(dw)), .height = CUI_PX(floorf(dh)), .radius = 13, .clip = true) {
+                        if (!annot_tile_image(ui, g_vt_s, key, tex, tw, th, zv, floorf(dw), floorf(dh), sc))   /* anotações: com desenho ou ferramenta ativa, a imagem sai pela camada própria (annot.c) */
                         cui_image_viewer_ex(ui, "zv", tex, tw, th, zv, &(cui_image_viewer_opts){ .width = CUI_FILL, .height = CUI_PX(floorf(dh)), .max_zoom = sc * 8, .no_toolbar = true });
                     }
                     if (share_zoom_clamp(&zv->zoom, &zv->cx, &zv->cy, sc, 8)) zoom_pct = share_zoom_pct(zv->zoom, sc);
@@ -1394,6 +1396,7 @@ bool share_hide_chip(cui_ctx *ui, app_state_t *s, bool compact) {
             cui_card_end(ui);
         }
         if (hov && chip && chip[0]) cui_box(ui, .width = CUI_FILL, .height = CUI_FILL, .align = CUI_ALIGN_END, .justify = CUI_JUSTIFY_START, .pad = 18) { briks_status_pill(ui, chip); }
+        if (g_vt_s && tex) annot_tile_ui(ui, g_vt_s, key, hov, compact);   /* botão "Anotar" e barra de ferramentas */
         if (zv && zoom_pct > 100) {   /* selo do zoom: clicar volta a 100% (duplo clique na imagem e a tecla 0 também) */
             cui_box(ui, .width = CUI_FILL, .height = CUI_FILL, .align = CUI_ALIGN_START, .justify = CUI_JUSTIFY_START, .pad = 18) {
                 char z[48]; snprintf(z, sizeof z, "%d%% · voltar a 100%%", zoom_pct);
@@ -1453,12 +1456,12 @@ bool share_hide_chip(cui_ctx *ui, app_state_t *s, bool compact) {
         }
     }
     if (compact && !s_modal_hint && briks_clicked_r(ui, "vt", 20.0f)) clicked = true;
-    if (g_tile_grid && !compact && !s_modal_hint && zoom_pct <= 100) {
+    if (g_tile_grid && !compact && !s_modal_hint && zoom_pct <= 100 && !annot_tile_active(key)) {
         /* Grade: clique CURTO no bloco (não arrasto, não nos controles do bloco) abre esta transmissão em Foco; Enter com o ponteiro sobre o bloco também */
         const cui_vec2 mp = cui_mouse_pos(ui); const cui_rect vr = cui_get_rect(ui, cui_make_id(ui, "vt"));
         bool inside = vr.w > 0 && pt_in(vr, mp) && !briks_blocked() && !briks_covered(ui);
-        const char *kids[] = { "volbar", "zrst", "pnote", "lab", "sgcov" };
-        for (int k = 0; k < 5 && inside; k++) { cui_rect kr = cui_get_rect(ui, cui_make_id(ui, kids[k])); if (kr.w > 0 && pt_in(kr, mp)) inside = false; }
+        const char *kids[] = { "volbar", "zrst", "pnote", "lab", "sgcov", "anbtn", "anbar" };
+        for (int k = 0; k < 7 && inside; k++) { cui_rect kr = cui_get_rect(ui, cui_make_id(ui, kids[k])); if (kr.w > 0 && pt_in(kr, mp)) inside = false; }
         bool open = false;
         if (g_tg_press && inside) { g_tg_at = mp; g_tg_key = key; }
         if (g_tg_release && inside && g_tg_key == key) {   /* soltou no mesmo bloco, quase onde apertou */

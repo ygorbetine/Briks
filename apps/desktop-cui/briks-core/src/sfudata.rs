@@ -837,6 +837,23 @@ mod t {
     }
 
     #[test]
+    fn annotations_cross_the_data_layer_and_a_late_joiner_gets_the_state() {
+        let (mut a, mut b) = pair();
+        let stroke = json!({ "i": 1, "c": 1, "k": "s", "m": 0, "col": 255, "w": 30, "p": [100, 100, 200, 200] });
+        let out = a.on_cmd(MeshCmd::Annot { body: json!({ "kind": "ops", "scope": "b:0", "ops": [stroke] }) }, (true, false)).unwrap();
+        let m = sends(&out).remove(0);
+        assert_eq!(m["t"], "annot.ops");
+        // quem entra depois (b nunca viu o traço) pede o estado e a reposta de a o traz, com o autor provado pelo canal
+        let want = sends(&b.on_cmd(MeshCmd::Annot { body: json!({ "kind": "sync" }) }, (true, false)).unwrap()).remove(0);
+        assert_eq!(want["t"], "annot.want");
+        let snap = sends(&a.on_packet("idb", &bytes(&want))).into_iter().find(|m| m["t"] == "annot.snap").expect("a responde com o estado");
+        let got = b.on_packet("ida", &bytes(&snap));
+        assert!(got.iter().any(|o| matches!(o, Out::Ev(MeshEvent::Sound(e)) if e["ev"] == "annot.ops" && e["ops"][0]["a"] == json!(a.fp))), "eventos: {}", got.len());
+        // lixo de um par: sem efeito nem pânico
+        assert!(b.on_packet("ida", &bytes(&json!({ "v": 1, "t": "annot.ops", "scope": "b:0", "ops": [{ "k": "s", "p": "x" }] }))).iter().all(|o| !matches!(o, Out::Ev(MeshEvent::Sound(_)))));
+    }
+
+    #[test]
     fn dm_to_unknown_peer_waits_in_outbox_until_hello() {
         let (mut a, mut b) = (layer("Ana", "ida", None, 1), layer("Beto", "idb", None, 2));
         assert!(sends(&a.on_cmd(MeshCmd::Chat { to_fp: b.fp.clone(), text: "antes".into() }, (true, false)).unwrap()).is_empty());
