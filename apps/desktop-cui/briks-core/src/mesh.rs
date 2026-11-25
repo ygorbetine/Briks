@@ -36,7 +36,12 @@ use crate::identity::{self, ChatWire, Identity, PublicJwk};
 use crate::realtime::{Realtime, RtEvent};
 use crate::signaling::{is_initiator, secure_room_id, Envelope, Reject, Validator};
 
-pub const MAX_PEERS: usize = 5;
+pub const MAX_PEERS: usize = 7;   // até 8 pessoas na sala (cada uma liga a 7 outras)
+/// Sinal de quem ainda não está na presença é guardado por este tempo (a presença e a sinalização chegam por caminhos diferentes).
+const PENDING_SIG_MS: i64 = 20_000;
+const PENDING_SIG_MAX: usize = 64;
+/// Um par que não conecta neste prazo tem a conexão refeita do zero (oferta perdida, ICE parado em "negociando").
+const STALL_MS: i64 = 12_000;
 pub const MAX_PENDING_ICE: usize = 256;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -211,6 +216,7 @@ struct Peer {
     recv: [Arc<RecvState>; 2],   // recepção por slot
     recv_cam: Arc<RecvState>,   // vídeo da câmera DESTE peer (a transmissão de tela dele é `recv`)
     vcodecs: Vec<String>,   // codecs de vídeo que este peer decodifica (anunciados no peer.state; sem anúncio = só h264)
+    born: i64,              // quando esta conexão foi criada (para refazer a que não conecta)
     caps_known: bool,       // já recebi o peer.state dele (antes disso não ligo VP8/VP9 a ele)
 }
 
@@ -287,6 +293,7 @@ struct Actor {
     seen_groups: HashSet<String>,
     audio: Option<Arc<Audio>>,
     audio_rx: Option<mpsc::Receiver<AudioEvent>>,
+    pending_sig: Vec<(i64, Value)>,   // sinais de quem ainda não estava na presença: reprocessados quando ele aparece
     joined: HashMap<String, u64>,   // peerId -> joinedAt da presença
     banned: HashSet<String>,        // fps expulsos nesta sessão
     profile: (String, String),      // (status, presença) anunciados aos peers autenticados
@@ -327,7 +334,7 @@ impl Actor {
         let annot = crate::annot::Net::new(&identity.fingerprint());
         let (sev_tx, sev_rx) = mpsc::channel::<Value>(256);
         let (cam_tx, cam_rx) = mpsc::channel::<Value>(256);
-        Actor { fec_dcs: Arc::new(std::sync::Mutex::new(vec![])), vcodecs: crate::codec::local_caps(), cfg, identity, rt, ev, room_hash, validator, present: HashSet::new(), viewers: [HashSet::new(), HashSet::new()], peers: HashMap::new(), itx, irx: Some(irx), next_gen: 1, outbox: HashMap::new(), sent_notified: HashSet::new(), dm_off: HashSet::new(), watch_intent: HashMap::new(), remote_live: HashSet::new(), cam_live: HashSet::new(), seen_msgs: HashSet::new(), sons, annot, incoming: HashMap::new(), outgoing: HashMap::new(), pending: HashMap::new(), recv_dir: recv_dir(), ev_last_ts: 0, seen_events: HashSet::new(), audio, audio_rx, joined: HashMap::new(), banned: HashSet::new(), profile: (String::new(), String::new()), media: None, sfu_id: String::new(), dead: false, blocked: HashSet::new(), share: [None, None], share_gens: [0, 0], share_gen: 0, net: Default::default(), idr: [Arc::new(std::sync::atomic::AtomicBool::new(true)), Arc::new(std::sync::atomic::AtomicBool::new(true))], vtrack: [None, None], cam: None, cam_gen: 0, cam_vout: None, cam_net: Default::default(), cam_idr: Arc::new(std::sync::atomic::AtomicBool::new(true)), cam_tx, cam_rx: Some(cam_rx), cam_watch: HashMap::new(), atrack: None, sev_tx, sev_rx: Some(sev_rx), seen_groups: HashSet::new(), hist: crate::history::Store::open(hist_dir()), hist_reqs: HashMap::new() }
+        Actor { pending_sig: Vec::new(), fec_dcs: Arc::new(std::sync::Mutex::new(vec![])), vcodecs: crate::codec::local_caps(), cfg, identity, rt, ev, room_hash, validator, present: HashSet::new(), viewers: [HashSet::new(), HashSet::new()], peers: HashMap::new(), itx, irx: Some(irx), next_gen: 1, outbox: HashMap::new(), sent_notified: HashSet::new(), dm_off: HashSet::new(), watch_intent: HashMap::new(), remote_live: HashSet::new(), cam_live: HashSet::new(), seen_msgs: HashSet::new(), sons, annot, incoming: HashMap::new(), outgoing: HashMap::new(), pending: HashMap::new(), recv_dir: recv_dir(), ev_last_ts: 0, seen_events: HashSet::new(), audio, audio_rx, joined: HashMap::new(), banned: HashSet::new(), profile: (String::new(), String::new()), media: None, sfu_id: String::new(), dead: false, blocked: HashSet::new(), share: [None, None], share_gens: [0, 0], share_gen: 0, net: Default::default(), idr: [Arc::new(std::sync::atomic::AtomicBool::new(true)), Arc::new(std::sync::atomic::AtomicBool::new(true))], vtrack: [None, None], cam: None, cam_gen: 0, cam_vout: None, cam_net: Default::default(), cam_idr: Arc::new(std::sync::atomic::AtomicBool::new(true)), cam_tx, cam_rx: Some(cam_rx), cam_watch: HashMap::new(), atrack: None, sev_tx, sev_rx: Some(sev_rx), seen_groups: HashSet::new(), hist: crate::history::Store::open(hist_dir()), hist_reqs: HashMap::new() }
     }
 
     async fn run(&mut self, mut rt_events: mpsc::Receiver<RtEvent>, mut cmds: mpsc::Receiver<MeshCmd>) {
@@ -352,6 +359,7 @@ impl Actor {
                     let fps: Vec<String> = self.outbox.iter().filter(|(_, l)| !l.is_empty()).map(|(k, _)| k.clone()).collect();   // (flush_outbox relê a fila em disco)
                     for fp in fps { self.flush_outbox(&fp).await; }
                     self.retry_auth().await;
+                    self.restart_stalled().await;
                     let o = self.sons.tick(now_ms() as u64); self.sons_out(o).await;
                 },
                 e = rt_events.recv() => match e {
@@ -389,6 +397,7 @@ impl Actor {
                 self.joined.insert(peer_id.clone(), meta["joinedAt"].as_u64().unwrap_or(u64::MAX));
                 if self.blocked.contains(&peer_id) || self.peers.len() >= MAX_PEERS || self.peers.contains_key(&peer_id) { return; }
                 if let Err(e) = self.add_peer(&peer_id).await { self.emit(MeshEvent::Error(format!("peer {peer_id}: {e}"))).await; return; }
+                self.replay_pending(&peer_id).await;
                 if is_initiator(&self.cfg.local_peer, &peer_id) { self.start_offer(&peer_id, true).await; }
             }
             RtEvent::PeerLeft(p) => {
@@ -400,11 +409,49 @@ impl Actor {
                 let present = self.present.clone();
                 match self.validator.check(&payload, |p| present.contains(p), now_ms()) {
                     Ok(env) => self.on_signal(env).await,
+                    Err(Reject::NotPresent) => {
+                        // a oferta chegou antes da presença do remetente: antes era descartada (e ninguém reenviava, o par ficava sem conectar)
+                        let now = now_ms();
+                        self.pending_sig.retain(|(t, _)| now - *t <= PENDING_SIG_MS);
+                        if self.pending_sig.len() >= PENDING_SIG_MAX { self.pending_sig.remove(0); }
+                        self.pending_sig.push((now, payload));
+                    }
                     Err(Reject::Duplicate) | Err(Reject::SelfEcho) | Err(Reject::Target) | Err(Reject::Room) => {}
                     Err(_) => {}
                 }
             }
         }
+    }
+
+    /// Reprocessa os sinais guardados de `peer` (agora presente), na ordem em que chegaram.
+    async fn replay_pending(&mut self, peer: &str) {
+        let now = now_ms();
+        let all = std::mem::take(&mut self.pending_sig);
+        let (mine, rest): (Vec<_>, Vec<_>) = all.into_iter().filter(|(t, _)| now - *t <= PENDING_SIG_MS).partition(|(_, v)| v["fromPeerId"].as_str() == Some(peer));
+        self.pending_sig = rest;
+        for (_, payload) in mine {
+            let present = self.present.clone();
+            if let Ok(env) = self.validator.check(&payload, |p| present.contains(p), now_ms()) { self.on_signal(env).await; }
+        }
+    }
+
+    /// Par que não conectou em `STALL_MS` (oferta perdida, ICE parado): só quem oferece refaz a conexão, o outro aceita a nova oferta.
+    async fn restart_stalled(&mut self) {
+        let now = now_ms();
+        let stalled: Vec<String> = self.peers.iter()
+            .filter(|(id, p)| now - p.born > STALL_MS && !p.proven && p.pc.connection_state() != RTCPeerConnectionState::Connected && self.present.contains(*id) && is_initiator(&self.cfg.local_peer, id))
+            .map(|(k, _)| k.clone()).collect();
+        for id in stalled { self.drop_for_reconnect(&id).await; }
+    }
+
+    /// Fecha a conexão do par e agenda `Reconnect` (usado quando a conexão falhou ou nunca saiu de "negociando").
+    async fn drop_for_reconnect(&mut self, peer: &str) {
+        self.end_remote_streams(peer, false).await;
+        for n in &self.net { n.lock().unwrap().peers.remove(peer); }
+        if let Some(a) = &self.audio { a.remove_peer(peer); }
+        if let Some(p) = self.peers.remove(peer) { let _ = p.pc.close().await; }
+        let (itx, id) = (self.itx.clone(), peer.to_string());
+        tokio::spawn(async move { tokio::time::sleep(std::time::Duration::from_millis(1500)).await; let _ = itx.send(Internal::Reconnect { peer: id }).await; });
     }
 
     fn rtc_config(&self) -> RTCConfiguration {
@@ -504,7 +551,7 @@ impl Actor {
         let recv_cam = Arc::new(RecvState::default());
         let pc = self.new_pc(peer_id, gen, recv.clone(), recv_cam.clone()).await?;
         let polite = !is_initiator(&self.cfg.local_peer, peer_id);
-        self.peers.insert(peer_id.into(), Peer { pc, gen, polite, making_offer: false, ignore_offer: false, pending_ice: vec![], dc: None, fp: None, jwk: None, my_nonce: String::new(), proven: false, sent_proof: false, name: String::new(), vsender: [None, None], recv_v2: false, fec_dc: None, csender: None, asender: false, reneg_pending: false, recv_slots: false, recv, recv_cam, vcodecs: vec!["h264".into()], caps_known: false });
+        self.peers.insert(peer_id.into(), Peer { pc, gen, polite, making_offer: false, ignore_offer: false, pending_ice: vec![], dc: None, fp: None, jwk: None, my_nonce: String::new(), proven: false, sent_proof: false, name: String::new(), vsender: [None, None], recv_v2: false, fec_dc: None, csender: None, asender: false, reneg_pending: false, recv_slots: false, recv, recv_cam, vcodecs: vec!["h264".into()], born: now_ms(), caps_known: false });
         Ok(())
     }
 
@@ -1359,12 +1406,7 @@ impl Actor {
                 // volta e os dois ainda na sala. Fecha, espera um pouco e refaz do zero (o lado iniciador oferece, o outro aceita a
                 // oferta na própria `on_signal`); a transmissão em curso é anexada de novo na reautenticação (`after_auth`).
                 if state == RTCPeerConnectionState::Failed {
-                    self.end_remote_streams(&peer, false).await;   // a conexão voltará (Reconnect) e a transmissão reaparece com "on"; até lá nada de imagem parada
-                    for n in &self.net { n.lock().unwrap().peers.remove(&peer); }
-                    if let Some(a) = &self.audio { a.remove_peer(&peer); }
-                    if let Some(p) = self.peers.remove(&peer) { let _ = p.pc.close().await; }
-                    let (itx, id) = (self.itx.clone(), peer);
-                    tokio::spawn(async move { tokio::time::sleep(std::time::Duration::from_millis(1500)).await; let _ = itx.send(Internal::Reconnect { peer: id }).await; });
+                    self.drop_for_reconnect(&peer).await;   // a conexão voltará (Reconnect) e a transmissão reaparece com "on"; até lá nada de imagem parada
                 }
             }
             Internal::Reconnect { peer } => {

@@ -74,3 +74,15 @@ async fn stream_request_and_reply_only_between_authenticated_peers() {
     let _ = a.cmd.send(MeshCmd::Close).await;
     let _ = b.cmd.send(MeshCmd::Close).await;
 }
+
+/// Quatro pessoas entrando ao mesmo tempo: todas precisam ver as outras três (antes, uma oferta que chegava antes da presença do
+/// remetente era descartada e o par ficava sem conectar até alguém sair e reentrar).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn four_peers_joining_together_all_connect() {
+    assert!(crate::mesh::MAX_PEERS >= 7, "a sala tem de aceitar 8 pessoas");
+    let port = crate::mock::start(0).await.unwrap();
+    let ids = ["aaaaaaaa-5a1a-4111-8111-0000000005c1", "bbbbbbbb-5a1a-4222-8222-0000000005c2", "cccccccc-5a1a-4333-8333-0000000005c3", "dddddddd-5a1a-4444-8444-0000000005c4"];
+    let mut nodes: Vec<_> = ids.iter().enumerate().map(|(i, id)| node(port, id, &format!("P{i}"), "sala-quatro", Arc::new(Identity::generate()))).collect();
+    for n in nodes.iter_mut() { assert!(authed(n, 3, 45).await, "um par não conectou com os três outros"); }
+    for n in &nodes { let _ = n.cmd.send(MeshCmd::Close).await; }
+}
