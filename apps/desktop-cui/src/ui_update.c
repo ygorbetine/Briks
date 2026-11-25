@@ -69,6 +69,9 @@ void update_dialog(cui_ctx *ui, app_state_t *s) {
 
 typedef struct { const char *version; const char *items[14]; } notes_t;
 static const notes_t NOTES[] = {
+    { "1.6.7", {
+        "Chamada: o contador de pessoas no topo agora conta você e só quem já está conectado.",
+        NULL } },
     { "1.6.6", {
         "Online e offline: cada amigo agora tem uma bolinha verde (online) ou cinza (offline) e o texto Online/Offline na lista. Funciona sem servidor de presença: o Briks avisa os amigos direto quando você entra.",
         "Chamada no modo Direto: salas de até 8 pessoas, e quem entrava junto com os outros não ficava mais sem aparecer (era preciso sair e reentrar).",

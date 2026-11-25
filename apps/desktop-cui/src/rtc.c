@@ -580,7 +580,9 @@ const char *rtc_status_text(const app_state_t *s, char *buf, size_t cap) {
     if (!s->in_room) { snprintf(buf, cap, "Você está fora da sala"); return buf; }
     const char *st = s->rtc_state[0] ? s->rtc_state : "conectando";
     if (!strcmp(st, "conectado")) {
-        if (s->rtc_peer_count) snprintf(buf, cap, "Conectado · %d pessoa%s na sala", s->rtc_peer_count, s->rtc_peer_count == 1 ? "" : "s");
+        const int here = s->rtc_authed_count + 1;   /* quem já provou a identidade, mais você; par ainda negociando ou que falhou não conta */
+        if (s->rtc_authed_count > 0) snprintf(buf, cap, "Conectado · %d pessoa%s na sala", here, here == 1 ? "" : "s");
+        else if (s->rtc_peer_count > 0) snprintf(buf, cap, "Conectado · conectando com %d pessoa%s…", s->rtc_peer_count, s->rtc_peer_count == 1 ? "" : "s");
         else snprintf(buf, cap, "Conectado · você está sozinho na sala");
     } else if (!strcmp(st, "erro")) snprintf(buf, cap, "Erro: %s", s->rtc_msg[0] ? s->rtc_msg : "falha na conexão");
     else if (!strcmp(st, "reconectando")) snprintf(buf, cap, "Reconectando…");
