@@ -17,6 +17,7 @@ bool g_hk_recording;   /* a tela de Atalhos está capturando uma tecla: os atalh
 static void act(app_state_t *s, int i) {
     if (i == 0) { s->mic_on = !s->mic_on; rtc_set_mic(s, s->mic_on); }   /* mutar não mexe no ensurdecer */
     else if (i == 1) { s->deaf = !s->deaf; rtc_set_deaf(s, s->deaf); }
+    else if (i == 3) { if (s->sh.active) share_stop(s); }   /* só para: nunca abre o diálogo de escolher a tela */
     else { if (s->sh.active) share_stop(s); else share_open_dialog(s); }
 }
 
@@ -49,7 +50,7 @@ void hotkeys_tick(cui_ctx *ui, app_state_t *s) {
     static int real = -1;
     if (real < 0) real = (getenv("BRIKS_HIDDEN") || getenv("BRIKS_SCRIPT") || getenv("BRIKS_DEMO")) ? 0 : 1;   /* testes ocultos: nunca registra atalho de verdade */
     const char *k[HK_N], *kp; bool ptt_on; float delay;
-    settings_keys(&k[0], &k[1], &k[2], &kp, &ptt_on, &delay);
+    settings_keys(&k[0], &k[1], &k[2], &k[3], &kp, &ptt_on, &delay);
     unsigned m; int vk;
 
     const bool want = s->in_room;

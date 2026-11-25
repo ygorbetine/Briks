@@ -39,7 +39,8 @@ typedef struct {
     bool call_mode_set;           /* o usuário escolheu o modo da chamada (sem isso, o padrão é o Direto/P2P) */
     int net_pref, call_mode;      /* conexão: auto/internet direta/VPN privada; chamada: auto/P2P/SFU */
     bool ov_on; float ov_opacity; bool ov_live, ov_voice, ov_status, ov_mute, ov_selfshare, ov_through; int ov_corner;   /* sobreposição: canto 0 sup. direito, 1 sup. esquerdo, 2 inf. direito, 3 inf. esquerdo */
-    char key_mute[24], key_deafen[24], key_stream[24], key_ptt[24];
+    char key_mute[24], key_deafen[24], key_stream[24], key_ptt[24], key_stop[24];
+    int keys_v;   /* versão dos atalhos padrão: abaixo de 2 = ainda com os antigos (Ctrl+Shift+...), redefinidos uma vez para Ctrl+Shift+Alt+... */
     bool ptt_on; float ptt_delay;
     bool nt_online, nt_stream;
     bool telemetry;
@@ -86,7 +87,7 @@ static const struct { const char *k; char t; void *p; int cap; } F[] = {
     { "gate_db", 'f', &g_set.gate_db }, { "echo", 'b', &g_set.echo }, { "excl_audio", 'b', &g_set.excl_audio }, { "net_pref", 'i', &g_set.net_pref },
     { "call_mode", 'i', &g_set.call_mode }, { "call_mode_set", 'b', &g_set.call_mode_set }, { "fw_choice", 'i', &g_set.fw_choice }, { "ov_on", 'b', &g_set.ov_on }, { "ov_opacity", 'f', &g_set.ov_opacity }, { "ov_live", 'b', &g_set.ov_live },
     { "ov_voice", 'b', &g_set.ov_voice }, { "ov_status", 'b', &g_set.ov_status }, { "ov_mute", 'b', &g_set.ov_mute }, { "ov_selfshare", 'b', &g_set.ov_selfshare }, { "ov_through", 'b', &g_set.ov_through }, { "ov_corner", 'i', &g_set.ov_corner },
-    { "key_mute", 's', g_set.key_mute, 24 }, { "key_deafen", 's', g_set.key_deafen, 24 }, { "key_stream", 's', g_set.key_stream, 24 }, { "key_ptt", 's', g_set.key_ptt, 24 },
+    { "key_mute", 's', g_set.key_mute, 24 }, { "key_deafen", 's', g_set.key_deafen, 24 }, { "key_stream", 's', g_set.key_stream, 24 }, { "key_ptt", 's', g_set.key_ptt, 24 }, { "key_stop", 's', g_set.key_stop, 24 }, { "keys_v", 'i', &g_set.keys_v },
     { "ptt_on", 'b', &g_set.ptt_on }, { "ptt_delay", 'f', &g_set.ptt_delay }, { "nt_online", 'b', &g_set.nt_online }, { "nt_stream", 'b', &g_set.nt_stream },
     { "telemetry", 'b', &g_set.telemetry }, { "idle_min", 'i', &g_set.idle_min }, { "text_size", 'i', &g_set.text_size },
     { "grp_coll", 's', g_set.grp_coll, 190 }, { "ov_lay", 's', g_set.ov_lay, 190 }, { "ov_dev", 's', g_set.ov_dev, 48 },
@@ -95,14 +96,19 @@ static const struct { const char *k; char t; void *p; int cap; } F[] = {
 };
 #define NF ((int)(sizeof F / sizeof *F))
 
+/* Atalhos globais padrão: Ctrl+Shift+Alt + a letra (M mutar, D ensurdecer, S iniciar/parar, X parar transmissão). O apertar para falar não muda. */
+static void keys_default(void) {
+    snprintf(g_set.key_mute, sizeof g_set.key_mute, "Ctrl+Shift+Alt+M"); snprintf(g_set.key_deafen, sizeof g_set.key_deafen, "Ctrl+Shift+Alt+D");
+    snprintf(g_set.key_stream, sizeof g_set.key_stream, "Ctrl+Shift+Alt+S"); snprintf(g_set.key_stop, sizeof g_set.key_stop, "Ctrl+Shift+Alt+X");
+    g_set.keys_v = 2;
+}
 static void defaults(void) {
     memset(&g_set, 0, sizeof g_set);
     g_set.text_size = 1; g_set.idle_min = 60;
     g_set.in_vol = 100; g_set.out_vol = 100; g_set.gate_db = -50; g_set.echo = true; g_set.excl_audio = true;
     g_set.ov_on = true; g_set.ov_opacity = 92; g_set.ov_live = g_set.ov_voice = g_set.ov_status = g_set.ov_mute = g_set.ov_selfshare = g_set.ov_through = true;
     g_set.nt_online = g_set.nt_stream = true; g_set.ptt_delay = 200;
-    snprintf(g_set.key_mute, sizeof g_set.key_mute, "Ctrl+Shift+M"); snprintf(g_set.key_deafen, sizeof g_set.key_deafen, "Ctrl+Shift+D");
-    snprintf(g_set.key_stream, sizeof g_set.key_stream, "Ctrl+Shift+S");
+    keys_default();
 }
 
 static bool cfg_path(char *out, size_t cap) {
@@ -116,10 +122,11 @@ static void save(void);
 static void load(void) { load_inner(); g_text_size = g_set.text_size < 0 ? 0 : g_set.text_size > 3 ? 3 : g_set.text_size; }
 static void load_inner(void) {
     defaults();
+    g_set.keys_v = 0;   /* só o arquivo diz de que versão são os atalhos dele (sem a chave = instalação antiga) */
     { const char *ts = getenv("BRIKS_TEXT_SIZE"); if (ts) g_set.text_size = atoi(ts); }
     { const char *im = getenv("BRIKS_IDLE_MIN"); if (im) g_set.idle_min = atoi(im); }   /* testes: prazo de inatividade em minutos (0 = nunca) */   /* capturas */
-    char p[MAX_PATH]; if (getenv("BRIKS_DEMO") || !cfg_path(p, sizeof p)) { g_set.call_mode = settings_migrate_call_mode(g_set.call_mode, g_set.call_mode_set); return; }   /* sem arquivo: o padrão é o Direto/P2P */
-    FILE *f = fopen(p, "rb"); if (!f) { g_set.call_mode = settings_migrate_call_mode(g_set.call_mode, g_set.call_mode_set); return; }
+    char p[MAX_PATH]; if (getenv("BRIKS_DEMO") || !cfg_path(p, sizeof p)) { g_set.call_mode = settings_migrate_call_mode(g_set.call_mode, g_set.call_mode_set); g_set.keys_v = 2; return; }   /* sem arquivo: o padrão é o Direto/P2P */
+    FILE *f = fopen(p, "rb"); if (!f) { g_set.call_mode = settings_migrate_call_mode(g_set.call_mode, g_set.call_mode_set); g_set.keys_v = 2; return; }
     char ln[480];   /* cabe codec_msg (320) */
     while (fgets(ln, sizeof ln, f)) {
         char *eq = strchr(ln, '='); if (!eq) continue; *eq = 0; char *v = eq + 1; v[strcspn(v, "\r\n")] = 0;
@@ -130,7 +137,9 @@ static void load_inner(void) {
     }
     fclose(f);
     const int cm = settings_migrate_call_mode(g_set.call_mode, g_set.call_mode_set);   /* sem escolha do usuário -> Direto/P2P (quem escolheu fica) */
-    if (cm != g_set.call_mode) { g_set.call_mode = cm; save(); }
+    const bool old_keys = g_set.keys_v < 2;   /* instalação anterior à 1.6.8: todos os atalhos globais passam para Ctrl+Shift+Alt+tecla (uma vez só) */
+    if (old_keys) keys_default();
+    if (cm != g_set.call_mode || old_keys) { g_set.call_mode = cm; save(); }
 }
 static void save(void) {
     char p[MAX_PATH]; if (getenv("BRIKS_DEMO") || !cfg_path(p, sizeof p)) return;
@@ -179,7 +188,7 @@ static void soon(cui_ctx *ui, const char *what) {   /* o que ainda não tem efei
     char b[200]; snprintf(b, sizeof b, "Em breve: %s", what);
     cui_text(ui, b, .size = 12, .color = g_th.ph);
 }
-void settings_keys(const char **mute, const char **deafen, const char **stream, const char **ptt, bool *ptt_on, float *delay) { *mute = g_set.key_mute; *deafen = g_set.key_deafen; *stream = g_set.key_stream; *ptt = g_set.key_ptt; *ptt_on = g_set.ptt_on; *delay = g_set.ptt_delay; }
+void settings_keys(const char **mute, const char **deafen, const char **stream, const char **stop, const char **ptt, bool *ptt_on, float *delay) { *mute = g_set.key_mute; *deafen = g_set.key_deafen; *stream = g_set.key_stream; *stop = g_set.key_stop; *ptt = g_set.key_ptt; *ptt_on = g_set.ptt_on; *delay = g_set.ptt_delay; }
 void settings_audio_ex(char *mic, size_t mic_cap, char *out, size_t out_cap, int *noise_off) {
     snprintf(mic, mic_cap, "%s", g_set.mic ? g_set.mic_name : ""); snprintf(out, out_cap, "%s", g_set.out ? g_set.out_name : ""); *noise_off = g_set.noise_off == 1 ? 1 : g_set.noise_off == 2 ? 2 : 0;
 }
@@ -296,17 +305,17 @@ void settings_text_step(cui_ctx *ui, int delta) {
 }
 
 /* ---- atalhos: gravar a combinação apertada, remover, avisar de conflito ---- */
-static int rec_slot = -1;                 /* 0..2 globais, 3 apertar para falar */
+static int rec_slot = -1;                 /* 0..2 e 4 globais, 3 apertar para falar */
 static char key_msg[160]; static int key_msg_slot = -1;
-static char *key_field(int i) { return i == 0 ? g_set.key_mute : i == 1 ? g_set.key_deafen : i == 2 ? g_set.key_stream : g_set.key_ptt; }
-static const char *const KEY_LABEL[4] = { "Mutar / desmutar microfone", "Ensurdecer", "Iniciar / parar transmissão", "Tecla de apertar para falar" };
+static char *key_field(int i) { return i == 0 ? g_set.key_mute : i == 1 ? g_set.key_deafen : i == 2 ? g_set.key_stream : i == 4 ? g_set.key_stop : g_set.key_ptt; }
+static const char *const KEY_LABEL[5] = { "Mutar / desmutar microfone", "Ensurdecer", "Iniciar / parar transmissão", "Tecla de apertar para falar", "Parar transmissão" };
 static void key_apply(int i, const char *t) {   /* aceita a combinação gravada ou explica por que não */
     unsigned m; int v; char fin[48];
     if (!hk_parse(t, &m, &v)) return;
     if (i == 3) { m = 0; if (!hk_format(0, v, fin, sizeof fin)) return; t = fin; }   /* apertar para falar segue só a tecla */
     key_msg_slot = i; key_msg[0] = 0;
-    for (int j = 0; j < 4; j++) if (j != i && hk_same(key_field(j), t)) { snprintf(key_msg, sizeof key_msg, "%s já usa %s. Escolha outra combinação.", KEY_LABEL[j], t); return; }
-    if (i < 3 && !hk_is_mouse(v) && !hk_same(key_field(i), t)) {
+    for (int j = 0; j < 5; j++) if (j != i && hk_same(key_field(j), t)) { snprintf(key_msg, sizeof key_msg, "%s já usa %s. Escolha outra combinação.", KEY_LABEL[j], t); return; }
+    if (i != 3 && !hk_is_mouse(v) && !hk_same(key_field(i), t)) {
         const char *busy = getenv("BRIKS_HK_BUSY");   /* testes: finge que outro programa usa este combo */
         const bool hidden = getenv("BRIKS_HIDDEN") || getenv("BRIKS_SCRIPT") || getenv("BRIKS_DEMO");
         if ((busy && hk_same(busy, t)) || (!busy && !hidden && !hkw_probe(m, v))) { snprintf(key_msg, sizeof key_msg, "Outro programa já usa %s. Escolha outra combinação.", t); return; }
@@ -328,10 +337,11 @@ static void key_row(cui_ctx *ui, app_state_t *s, int i) {
         cui_pop_id(ui);
     }
     if (key_msg_slot == i && key_msg[0]) cui_text(ui, key_msg, .size = 12, .color = B_DANGER, .width = CUI_FILL);
-    else if (i < 3 && f[0]) {
+    else if (i != 3 && f[0]) {
+        const int hi = i == 4 ? 3 : i;   /* o estado do registro: 0 mutar, 1 ensurdecer, 2 transmissão, 3 parar */
         if (!s->in_room) sub(ui, "Passa a valer quando você entra numa chamada.");
-        else if (s->hk_status[i] == HKS_BUSY) cui_text(ui, "Outro programa já usa esta combinação: ela não vai funcionar. Escolha outra.", .size = 12, .color = B_DANGER, .width = CUI_FILL);
-        else if (s->hk_status[i] == HKS_OK || s->hk_status[i] == HKS_POLLED) cui_text(ui, "Ativo agora, mesmo com o Briks em segundo plano.", .size = 12, .color = B_ONLINE);
+        else if (s->hk_status[hi] == HKS_BUSY) cui_text(ui, "Outro programa já usa esta combinação: ela não vai funcionar. Escolha outra.", .size = 12, .color = B_DANGER, .width = CUI_FILL);
+        else if (s->hk_status[hi] == HKS_OK || s->hk_status[hi] == HKS_POLLED) cui_text(ui, "Ativo agora, mesmo com o Briks em segundo plano.", .size = 12, .color = B_ONLINE);
     }
 }
 
@@ -388,10 +398,10 @@ int settings_probe(const char *n, app_state_t *s) {
     if (!strcmp(n, "mic_test_err")) return s->mic_test_msg[0] != 0;
     if (!strcmp(n, "mic_problem")) return rtc_mic_problem(s);
     if (!strcmp(n, "dev_notice")) return s->dev_notice[0] != 0;
-    if (!strncmp(n, "hk_status", 9)) return s->hk_status[n[9] - '0' < 3 && n[9] >= '0' ? n[9] - '0' : 0];
-    if (!strncmp(n, "key_", 4) && (!strcmp(n + 4, "mute") || !strcmp(n + 4, "deafen") || !strcmp(n + 4, "stream") || !strcmp(n + 4, "ptt"))) return key_field(n[4] == 'm' ? 0 : n[4] == 'd' ? 1 : n[4] == 's' ? 2 : 3)[0] != 0;
-    if (!strncmp(n, "keyvk_", 6)) { const char *w = n + 6; int i = !strcmp(w, "mute") ? 0 : !strcmp(w, "deafen") ? 1 : !strcmp(w, "stream") ? 2 : 3; return hk_parse(key_field(i), &m, &v) ? v : 0; }
-    if (!strncmp(n, "keymods_", 8)) { const char *w = n + 8; int i = !strcmp(w, "mute") ? 0 : !strcmp(w, "deafen") ? 1 : !strcmp(w, "stream") ? 2 : 3; return hk_parse(key_field(i), &m, &v) ? (int)m : 0; }
+    if (!strncmp(n, "hk_status", 9)) return s->hk_status[n[9] - '0' < 4 && n[9] >= '0' ? n[9] - '0' : 0];
+    if (!strncmp(n, "key_", 4) && (!strcmp(n + 4, "mute") || !strcmp(n + 4, "deafen") || !strcmp(n + 4, "stream") || !strcmp(n + 4, "stop") || !strcmp(n + 4, "ptt"))) return key_field(!strcmp(n + 4, "stop") ? 4 : n[4] == 'm' ? 0 : n[4] == 'd' ? 1 : n[4] == 's' ? 2 : 3)[0] != 0;
+    if (!strncmp(n, "keyvk_", 6)) { const char *w = n + 6; int i = !strcmp(w, "mute") ? 0 : !strcmp(w, "deafen") ? 1 : !strcmp(w, "stream") ? 2 : !strcmp(w, "stop") ? 4 : 3; return hk_parse(key_field(i), &m, &v) ? v : 0; }
+    if (!strncmp(n, "keymods_", 8)) { const char *w = n + 8; int i = !strcmp(w, "mute") ? 0 : !strcmp(w, "deafen") ? 1 : !strcmp(w, "stream") ? 2 : !strcmp(w, "stop") ? 4 : 3; return hk_parse(key_field(i), &m, &v) ? (int)m : 0; }
     if (!strcmp(n, "cfg_cm")) return g_set.call_mode;
     if (!strcmp(n, "cfg_mic")) return g_set.mic;
     if (!strcmp(n, "cfg_noise_off")) return g_set.noise_off;
@@ -713,7 +723,7 @@ void settings_dialog(cui_ctx *ui, app_state_t *s) {
                 case 5: /* Atalhos */
                     SCARD(ui, "ATALHOS GLOBAIS") {
                         sub(ui, "Funcionam numa chamada, mesmo com o Briks em segundo plano. Clique em Gravar e aperte a combinação; o botão do meio e os laterais do mouse também servem.");
-                        key_row(ui, s, 0); key_row(ui, s, 1); key_row(ui, s, 2);
+                        key_row(ui, s, 0); key_row(ui, s, 1); key_row(ui, s, 2); key_row(ui, s, 4);
                         sub(ui, "Se outro programa já usa a combinação, o Briks avisa e não a grava.");
                         { const int hs = overlay_probe("overlay_hotkey");
                           cui_text(ui, "Editar a sobreposição: Ctrl+Shift+O", .size = 12, .color = B_MUTED);

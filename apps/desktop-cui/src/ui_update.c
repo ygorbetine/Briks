@@ -69,6 +69,9 @@ void update_dialog(cui_ctx *ui, app_state_t *s) {
 
 typedef struct { const char *version; const char *items[14]; } notes_t;
 static const notes_t NOTES[] = {
+    { "1.6.8", {
+        "Atalhos: novo atalho Parar transmissão (só para; nunca abre a escolha de tela). Todos os atalhos globais passam a ser Ctrl+Shift+Alt + a tecla: M mutar, D ensurdecer, S iniciar/parar transmissão e X parar transmissão. Quem já tinha atalhos próprios tem esses quatro redefinidos uma vez; dá para mudar em Configurações > Atalhos. O apertar para falar não muda.",
+        NULL } },
     { "1.6.7", {
         "Chamada: o contador de pessoas no topo agora conta você e só quem já está conectado.",
         NULL } },

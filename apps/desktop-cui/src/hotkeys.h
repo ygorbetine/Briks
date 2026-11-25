@@ -19,7 +19,7 @@ typedef struct { bool held; double released_at; bool open; } hk_ptt_t;
 bool hk_ptt_step(hk_ptt_t *p, bool down_now, double now_ms, double delay_ms);   /* devolve se o microfone deve estar aberto */
 
 /* ---- registro real (hotkeys_win.c) ---- */
-#define HK_N 3
+#define HK_N 4   /* globais registrados: mutar, ensurdecer, iniciar/parar transmissão, parar transmissão */
 enum { HKS_NONE = 0, HKS_OK = 1, HKS_BUSY = 2, HKS_POLLED = 3 };   /* sem atalho / registrado / outro programa usa / mouse: lido por varredura */
 /* Troca o conjunto de atalhos globais registrados (acc[i] vazio = nenhum). status[i] (opcional) devolve o resultado de cada um. */
 void hkw_set(const char *const acc[HK_N], int status[HK_N]);

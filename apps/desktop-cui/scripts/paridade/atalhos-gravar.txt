@@ -2,7 +2,10 @@
 waitms 800
 tap 441 755
 mtap 300 310
-expect keymods_mute 3
+expect keymods_mute 7
+expect keyvk_stop 88
+expect keymods_stop 7
+expect keymods_stream 7
 snap h0
 mtap 950 241
 expect rec_slot 0
@@ -30,9 +33,12 @@ expect keyvk_deafen 68
 snap h3
 mtap 1021 457
 expect key_stream 0
-mtap 490 646
+resize 1296 960
+waitms 600
+snap h3b
+mtap 490 754
 snap h4
-mtap 1027 745
+mtap 1027 853
 snap ptt1
 expect rec_slot 3
 hkey Ctrl+X
@@ -40,7 +46,7 @@ waitms 300
 expect rec_slot -1
 expect keyvk_ptt 88
 expect keymods_ptt 0
-mtap 958 745
+mtap 958 853
 snap ptt2
 expect rec_slot 3
 hkey Mouse4
