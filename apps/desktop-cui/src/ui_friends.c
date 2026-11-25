@@ -6,6 +6,7 @@
 #include "sysint.h"
 #include "core.h"
 #include "dmcall.h"
+#include "ppres.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -139,6 +140,7 @@ static bool in_call(const app_state_t *s, const person_t *p) {   /* está na sua
 /* online = batimento recente no servidor (0007) ou está na sua chamada agora (vale mesmo se o servidor ainda não tem a 0007) */
 bool friends_online(const app_state_t *s, const person_t *p) {
     if (in_call(s, p)) return true;
+    if (ppres_online(p->id)) return true;   /* o amigo me avisou (ppres.c): vale sem servidor de presença */
     if (s->pres_remote) for (int i = 0; i < s->pres_n; i++) if (s->pres[i].online && !strcmp(s->pres[i].id, p->id)) return true;
     return false;
 }
@@ -221,8 +223,8 @@ static bool row_narrow(void) { return g_panel_w < 330.0f; }
 static bool row_tiny(void) { return g_panel_w < 240.0f; }
 #define ROW_BEGIN(ui, p) \
     cui_box((ui), .id = "fr", .dir = CUI_ROW, .width = CUI_FILL, .pad_x = row_narrow() ? 8 : 12, .pad_y = row_narrow() ? 6 : 8, .gap = row_narrow() ? 8 : 12, .radius = 14, .bg = B_GLASS_CARD, .border = 1, .border_color = B_GLASS_BORDER_SOFT, .align = CUI_ALIGN_CENTER)
-static void row_ident(cui_ctx *ui, const person_t *p, const char *sub_override, bool online) {
-    briks_avatar_online(ui, p->name, row_narrow() ? 32 : 36, friend_photo(p->id), online);   /* bolinha verde no avatar: online agora */
+static void row_ident(cui_ctx *ui, const person_t *p, const char *sub_override, int online) {   /* online: 1 verde, 0 cinza, -1 sem estado (pedidos: ainda não são amigos) */
+    if (online < 0) briks_avatar(ui, p->name, row_narrow() ? 32 : 36, friend_photo(p->id)); else briks_avatar_status(ui, p->name, row_narrow() ? 32 : 36, friend_photo(p->id), online);   /* bolinha no avatar: verde = online, cinza = offline */
     cui_column(ui, .gap = 1, .width = CUI_FILL) {
         cui_row(ui, .gap = 6, .align = CUI_ALIGN_CENTER) {
             cui_text(ui, p->name, .nowrap = true);
@@ -230,7 +232,8 @@ static void row_ident(cui_ctx *ui, const person_t *p, const char *sub_override, 
         char sub[130] = "";
         if (sub_override) snprintf(sub, sizeof sub, "%s", sub_override);
         else if (p->status[0]) snprintf(sub, sizeof sub, "%s", p->status);
-        else if (p->nick[0]) snprintf(sub, sizeof sub, "@%s", p->nick);
+        else if (online < 0) { if (p->nick[0]) snprintf(sub, sizeof sub, "@%s", p->nick); }
+        else snprintf(sub, sizeof sub, "%s%s%s", online ? "Online" : "Offline", p->nick[0] ? " · @" : "", p->nick);
         if (sub[0]) cui_text(ui, sub, .size = 11.5f, .color = B_MUTED, .nowrap = true);
     }
 }
@@ -409,7 +412,7 @@ static void pending_tab(cui_ctx *ui, app_state_t *s) {
             person_t *p = &s->pending[i];
             cui_push_id_int(ui, 9300 + i);
             ROW_BEGIN(ui, p) {
-                row_ident(ui, p, p->nick[0] ? NULL : "quer ser seu amigo", false);
+                row_ident(ui, p, p->nick[0] ? NULL : "quer ser seu amigo", -1);
                 if (cui_icon_button(ui, CUI_ICON_CHECK, .variant = CUI_BUTTON_PRIMARY, .tooltip = "Aceitar")) app_accept_friend(s, p->request_id);
                 if (row_narrow()) {   /* estreito: Aceitar fica à vista; Recusar e Bloquear vão para o "..." */
                     cui_menu(ui, "Mais", .icon = CUI_ICON_ELLIPSIS, .icon_only = true, .placement = CUI_PLACE_BOTTOM_END) {
@@ -431,7 +434,7 @@ static void pending_tab(cui_ctx *ui, app_state_t *s) {
             person_t *p = &s->outgoing[i];
             cui_push_id_int(ui, 9400 + i);
             ROW_BEGIN(ui, p) {
-                row_ident(ui, p, p->nick[0] ? NULL : "aguardando resposta", false);
+                row_ident(ui, p, p->nick[0] ? NULL : "aguardando resposta", -1);
                 if (!row_narrow()) cui_text(ui, "Aguardando", .size = 11.5f, .color = B_MUTED);
                 if (cui_icon_button(ui, CUI_ICON_UNDO_2, .tooltip = "Cancelar pedido (aguardando resposta)")) account_remove_friend(s, p->id);
             }
@@ -449,7 +452,7 @@ static void blocked_tab(cui_ctx *ui, app_state_t *s) {
         if (!matches(s, &p)) continue;
         cui_push_id_int(ui, 9500 + i);
         ROW_BEGIN(ui, &p) {
-            row_ident(ui, &p, "bloqueado", false);
+            row_ident(ui, &p, "bloqueado", -1);
             if (row_narrow()) { if (cui_icon_button(ui, CUI_ICON_UNDO_2, .tooltip = "Desbloquear")) unb = i; }
             else if (cui_button(ui, "Desbloquear", .variant = CUI_BUTTON_SECONDARY, .size = CUI_SIZE_SM)) unb = i;
         }

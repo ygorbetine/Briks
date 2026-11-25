@@ -216,7 +216,7 @@ static bool person_row_ex(cui_ctx *ui, const person_t *f, bool active, cui_textu
     if (active && f->status[0]) cui_gap(ui, 52);   /* reserva o lugar do balão de status: ele não cobre o título nem outros itens */
     cui_box(ui, .id = "b", .dir = CUI_ROW, .width = CUI_FILL, .pad_x = 8, .pad_y = 6, .gap = 10, .radius = 12,
             .bg = active ? B_A(B_C1, 0x38) : CUI_RGBA(0x00000000), .align = CUI_ALIGN_CENTER) {
-        cui_box(ui, .id = "av") { briks_avatar_online(ui, f->name, 32, img, row_online); }
+        cui_box(ui, .id = "av") { briks_avatar_status(ui, f->name, 32, img, row_online); }
         const char *line = f->presence;   /* a linha sob o nome é só o rich presence; o status vai no balão */
         if (line[0]) {   /* rich presence: linha pequena sob o nome */
             cui_column(ui, .gap = 0, .width = CUI_FILL) {

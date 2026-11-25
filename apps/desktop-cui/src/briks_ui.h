@@ -592,6 +592,17 @@ static inline void briks_avatar_online(cui_ctx *ui, const char *name, float size
         }
     }
 }
+/* avatar de AMIGO com a bolinha de estado sempre visível: verde = online, cinza = offline */
+static inline void briks_avatar_status(cui_ctx *ui, const char *name, float size, cui_texture photo, bool online) {
+    if (online) { briks_avatar_online(ui, name, size, photo, true); return; }
+    const float d = size < 30.0f ? 10.0f : size < 60.0f ? 12.0f : 16.0f;
+    cui_box(ui, .dir = CUI_STACK, .width = CUI_PX(size), .height = CUI_PX(size)) {
+        briks_avatar(ui, name, size, photo);
+        cui_box(ui, .width = CUI_FILL, .height = CUI_FILL, .align = CUI_ALIGN_END, .justify = CUI_JUSTIFY_END) {
+            cui_box(ui, .width = CUI_PX(d), .height = CUI_PX(d), .radius = d * 0.5f, .bg = CUI_RGB(0x7b8494), .border = 2, .border_color = CUI_RGB(0x17101f)) {}
+        }
+    }
+}
 /* accountx.c: data de nascimento do cadastro e dica de login por @nick */
 bool birth_parse(const char *t, int *d, int *m, int *y);
 int birth_check(const char *txt, int ty, int tm, int td, char *err, size_t cap);   /* 0 = maior de 18; 1 formato, 2 futuro, 3 menor */

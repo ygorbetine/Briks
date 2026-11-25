@@ -12,7 +12,7 @@ FetchContent_Declare(cui
   PATCH_COMMAND  ${CMAKE_COMMAND} -P "${CMAKE_CURRENT_SOURCE_DIR}/patches/apply.cmake")
 FetchContent_MakeAvailable(cui)
 
-add_executable(briks_cui WIN32 src/main.c src/theme.c src/theme_cfg.c src/perf.c src/ui_auth.c src/ui_social.c src/ui_call.c src/app.c src/chat.c src/ginvite.c src/dmcall.c src/ui_history.c src/layout.c src/drag_stack.c src/drag_stack_ui.c src/dock.c src/script.c src/glass.c src/json.c src/backend.c src/core.c src/rtc.c src/profile.c src/msgui.c src/migrate.c src/update.c src/ui_update.c src/settings.c src/themes.c src/account.c src/ui_account.c src/ui_share.c src/ui_cam.c src/ui_voice.c src/hotkeys.c src/hotkeys_rt.c src/netdiag.c src/attach.c src/richtext.c src/ui_friends.c src/ui_groups.c src/winstate.c src/tray.c src/notify.c src/hotkeys_win.c src/storage.c src/settings_data.c src/overlay_host.c src/callhist.c src/firewall.c src/media_preview.c src/volume_ctl.c src/brick.c src/safety.c src/safety_ui.c src/nudge.c src/toastwin.c src/intro.c)
+add_executable(briks_cui WIN32 src/main.c src/theme.c src/theme_cfg.c src/perf.c src/ui_auth.c src/ui_social.c src/ui_call.c src/app.c src/chat.c src/ginvite.c src/dmcall.c src/ui_history.c src/layout.c src/drag_stack.c src/drag_stack_ui.c src/dock.c src/script.c src/glass.c src/json.c src/backend.c src/core.c src/rtc.c src/profile.c src/msgui.c src/migrate.c src/update.c src/ui_update.c src/settings.c src/themes.c src/account.c src/ui_account.c src/ui_share.c src/ui_cam.c src/ui_voice.c src/hotkeys.c src/hotkeys_rt.c src/netdiag.c src/attach.c src/richtext.c src/ui_friends.c src/ui_groups.c src/winstate.c src/tray.c src/notify.c src/hotkeys_win.c src/storage.c src/settings_data.c src/overlay_host.c src/callhist.c src/firewall.c src/media_preview.c src/volume_ctl.c src/brick.c src/safety.c src/safety_ui.c src/nudge.c src/ppres.c src/toastwin.c src/intro.c)
 target_sources(briks_cui PRIVATE src/annot.c src/board.c)   # anotações nas transmissões e Board da sala
 target_sources(briks_cui PRIVATE src/net_state.c src/accountx.c src/titlebar.c src/hotkeys_ovl.c src/ui_nettest.c src/sons.c src/sons_util.c)   # estado da internet e faixa offline
 if(WIN32)
@@ -55,7 +55,7 @@ if(EXISTS "${BRIKS_CORE_EXE}")
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${BRIKS_CORE_EXE}" $<TARGET_FILE_DIR:briks_cui>/briks-core.exe)
 endif()
 
-set(BRIKS_VERSION "1.6.5" CACHE STRING "Versao do app (usada pelo atualizador; o instalador recebe a sua em scripts/build-installer.ps1)")
+set(BRIKS_VERSION "1.6.6" CACHE STRING "Versao do app (usada pelo atualizador; o instalador recebe a sua em scripts/build-installer.ps1)")
 option(BRIKS_UPDATE_DEFAULT_ON "Atualizacao automatica ligada por padrao no app instalado (build do instalador)" OFF)
 target_compile_definitions(briks_cui PRIVATE BRIKS_APP_VERSION="${BRIKS_VERSION}")
 if(WIN32)   # ícone + recurso de versão (CompanyName, LegalCopyright...) gerados a partir de BRIKS_VERSION
@@ -114,6 +114,9 @@ target_link_libraries(briks_hotkey_test PRIVATE user32)
 
 add_executable(briks_nudge_test tests/nudge_test.c)   # chamar atenção: limites, Não perturbar e decisão do efeito (sem janela)
 target_compile_options(briks_nudge_test PRIVATE /utf-8)
+
+add_executable(briks_ppres_test tests/ppres_test.c)   # online/offline entre amigos: validade e limite de respostas (sem janela)
+target_compile_options(briks_ppres_test PRIVATE /utf-8)
 
 add_executable(briks_safety_test tests/safety_test.c src/safety.c src/json.c)   # cobertura de transmissões de desconhecidos e registro de denúncias: sem janela
 target_compile_options(briks_safety_test PRIVATE /utf-8)

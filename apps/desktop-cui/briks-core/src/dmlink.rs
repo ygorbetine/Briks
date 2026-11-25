@@ -42,7 +42,7 @@ pub fn is_poke(meta: &Value) -> bool { meta["poke"].as_bool() == Some(true) }
 /// Sinais assinados na caixa de chegada (1.6): "call" (estou ligando; dados {room, name}), "ginv" (convidei você para um grupo; {gid, name}).
 /// Vão como metadado de presença, junto com a chave pública e a assinatura de quem enviou: o receptor confere que a impressão digital é da chave,
 /// que a assinatura vale e que o sinal foi feito PARA a conta dele e há pouco tempo. Quem não é amigo ainda é descartado pela interface.
-pub const SIG_KINDS: [&str; 3] = ["call", "ginv", "nudge"];   // nudge (chamar atenção; dados {name}): só vale de amigo, a interface confere
+pub const SIG_KINDS: [&str; 5] = ["call", "ginv", "nudge", "hi", "bye"];   // hi = "estou online" (dados {ack}); bye = "saí" (online/offline entre amigos, sem servidor guardando nada)   // nudge (chamar atenção; dados {name}): só vale de amigo, a interface confere
 pub const SIG_MAX_AGE_MS: u64 = 15 * 60 * 1000;
 pub fn signal_canonical(kind: &str, data: &str, ts: u64, to_user: &str) -> String { format!("briks-sig1|{kind}|{data}|{ts}|{to_user}") }
 pub fn signal_meta(id: &Identity, kind: &str, data: &Value, ts: u64, to_user: &str) -> Value {
@@ -214,6 +214,20 @@ mod t {
         assert!(read_signal(&signal_meta(&id, "shake", &data, now_ms(), "user-b"), "o", "user-b", now_ms()).is_none(), "tipo desconhecido");
         let not_obj = signal_meta(&id, "nudge", &json!("texto"), now_ms(), "user-b");
         assert!(read_signal(&not_obj, "outro-fp", "user-b", now_ms()).is_none(), "dados que não são objeto");
+    }
+
+    #[test]
+    fn online_hi_and_bye_signals_are_signed_for_the_friend_only() {
+        let id = Identity::generate();
+        for kind in ["hi", "bye"] {
+            let meta = signal_meta(&id, kind, &json!({ "ack": true }), now_ms(), "user-b");
+            let (fp, k, d) = read_signal(&meta, "outro-fp", "user-b", now_ms()).expect("aviso de presença válido");
+            assert_eq!((fp.as_str(), k.as_str(), d["ack"].as_bool()), (id.fingerprint().as_str(), kind, Some(true)));
+            assert!(read_signal(&meta, "outro-fp", "user-c", now_ms()).is_none(), "feito para outra conta");
+        }
+        let mut forged = signal_meta(&id, "hi", &json!({ "ack": false }), now_ms(), "user-b");
+        forged["sig"]["k"] = json!("bye");
+        assert!(read_signal(&forged, "outro-fp", "user-b", now_ms()).is_none(), "trocar hi por bye invalida a assinatura");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -8,6 +8,7 @@
 #include "json.h"
 #include "sysint.h"
 #include "call.h"
+#include "ppres.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -136,7 +137,7 @@ void account_retry(app_state_t *s) { s->acct_asked = false; s->acct_state = ACCT
 
 void account_logout(app_state_t *s) {
     chat_dm_reset(s);
-    if (core_state() == CORE_READY) { core_send("{\"cmd\":\"presence.clear\"}"); core_send("{\"cmd\":\"account.logout\"}"); s->pres_n = 0; }
+    if (core_state() == CORE_READY) { core_send("{\"cmd\":\"presence.clear\"}"); core_send("{\"cmd\":\"account.logout\"}"); s->pres_n = 0; ppres_reset(); }
     s->acct_state = ACCT_OUT; s->acct_view = AV_MAIN; s->acct_bridge = BRIDGE_NONE;
     s->acct_user_id[0] = s->acct_nick[0] = s->acct_error[0] = s->acct_info[0] = 0;
     s->user_nick[0] = 0; set_photo(s, NULL);
@@ -668,6 +669,7 @@ void account_tick(app_state_t *s) {
     if (cs != CORE_READY) { cui_request_redraw(cui_app_ui(s->app)); return; }
     if (!s->acct_asked) { s->acct_asked = true; core_send("{\"cmd\":\"account.status\"}"); }
     account_presence_tick(s);
+    ppres_tick(s);
     account_friends_poll(s);
     account_status_sync(s);
     {   /* ganchos de teste automatizado: BRIKS_DEV_ACCT_AUTO=google|discord entra sozinho; BRIKS_DEV_IMPORT=1 importa o Briks antigo */

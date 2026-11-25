@@ -896,6 +896,24 @@ async fn handle(s: TcpStream, token: &str, cfg: &Config, accounts: Arc<crate::ac
                         out(&mut wr, json!({ "ev": "dm.signal.sent", "key": key, "ok": true })).await?;
                     }
                     "dm.log" => { if let Some(t) = v["text"].as_str() { crate::netlog::write(&format!("ui: {}", t.chars().take(200).collect::<String>())); } }
+                    // "estou online": um aviso assinado na caixa de cada amigo (ou "saí"); escalonado para não abrir dezenas de conexões de uma vez
+                    "presence.hello" => {
+                        let (Some(id), Some(url), Some(rkey)) = (identity.clone(), cfg.realtime_url.clone(), cfg.realtime_key.clone()) else { continue };
+                        let kind = if v["kind"].as_str() == Some("bye") { "bye" } else { "hi" };
+                        let ack = v["ack"].as_bool().unwrap_or(false);
+                        let targets: Vec<String> = v["friends"].as_array().map(|a| a.iter().filter_map(|x| x.as_str()).filter(|u| crate::dmlink::valid_id(u)).take(128).map(String::from).collect()).unwrap_or_default();
+                        crate::netlog::write(&format!("presenca {kind} para {} amigos", targets.len()));
+                        tokio::spawn(async move {
+                            for chunk in targets.chunks(4) {
+                                for to in chunk {
+                                    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+                                    let meta = crate::dmlink::signal_meta(&id, kind, &json!({ "ack": ack }), ts, to);
+                                    let _ = crate::dmlink::send_signal(RealtimeCfg::new(&url, &rkey), to, meta, Duration::from_secs(4));   // fecha sozinho depois de 4 s
+                                }
+                                tokio::time::sleep(Duration::from_millis(1500)).await;
+                            }
+                        });
+                    }
                     "dm.signal.stop" => {
                         if let Some(old) = v["key"].as_str().and_then(|k| signals.remove(k)) { crate::netlog::write("sinal retirado"); old.close().await; }
                     }

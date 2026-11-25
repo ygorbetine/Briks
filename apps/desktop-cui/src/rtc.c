@@ -11,6 +11,7 @@
 #include "call.h"
 #include "sons.h"
 #include "annot.h"
+#include "ppres.h"
 #include <math.h>
 #include <windows.h>
 #include <shellapi.h>
@@ -355,6 +356,8 @@ bool rtc_handle_event(app_state_t *s, const char *line) {
         changed = chat_in_message(s, j, false);   /* DM: grava no histórico local, mostra na conversa aberta e avisa (chat.c) */
     } else if (!strcmp(ev, "chat.history")) {   /* mensagens que faltavam, vindas da sincronização com o amigo */
         changed = chat_in_message(s, j, true);
+    } else if (!strncmp(ev, "dm.signal", 9) && (!strcmp(json_str(j, "kind", ""), "hi") || !strcmp(json_str(j, "kind", ""), "bye"))) {   /* online/offline entre amigos (ppres.c) */
+        if (!strcmp(ev, "dm.signal")) ppres_event(s, j); changed = false;
     } else if (!strcmp(ev, "dm.signal") && !strcmp(json_str(j, "kind", ""), "nudge")) {   /* chamar atenção (nudge.c): só de amigo, no máx. 1 a cada 15 s */
         nudge_core_event(s, j); changed = false;
     } else if (!strcmp(ev, "dm.signal.gone") && !strcmp(json_str(j, "kind", ""), "nudge")) {
