@@ -195,8 +195,11 @@ static void collect_lives(const app_state_t *s) {
     if (g_fake_lives >= 0) { for (int k = 0; k < g_fake_lives && k < MAXLIVE; k++) { char id[24], nm[24]; snprintf(id, sizeof id, "fake-%d", k); snprintf(nm, sizeof nm, "Participante %d", k + 1); live_add(id, nm, "", -1, 0); } }
     else if (g_edit && !s->in_room) { live_add("demo-a", "Amigo 1", "", -1, 0); live_add("demo-b", "Amigo 2", "", -1, 0); }
     else for (int i = 0; i < BRIKS_MAX_PEERS; i++) if (s->rtc_peers[i].id[0] && !safety_covered(s, i)) {   /* coberta (desconhecido não revelado / parei de ver): não aparece por cima do jogo */
-        if (s->sh.remote[i].on) live_add(s->rtc_peers[i].id, s->rtc_peers[i].name, s->sh.remote[i].path, i, 0);
-        if (s->sh.remote2[i].on) live_add(s->rtc_peers[i].id, s->rtc_peers[i].name, s->sh.remote2[i].path, i, 1);
+        /* a chave da posição/escala/liga-desliga vem da impressão digital da pessoa (igual em toda sessão); o id do peer muda a cada entrada na sala,
+         * e com ele a miniatura voltava ao canto padrão toda vez que a pessoa reentrava. Sem a impressão digital ainda (não autenticou), cai no id. */
+        const char *who = s->rtc_peers[i].fp[0] ? s->rtc_peers[i].fp : s->rtc_peers[i].id;
+        if (s->sh.remote[i].on) live_add(who, s->rtc_peers[i].name, s->sh.remote[i].path, i, 0);
+        if (s->sh.remote2[i].on) live_add(who, s->rtc_peers[i].name, s->sh.remote2[i].path, i, 1);
     }
     if (g_live_sel >= g_nlives) g_live_sel = 0;
     g_nshown = g_nlives < NT ? g_nlives : NT;
